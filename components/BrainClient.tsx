@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import CaptureTab from "./CaptureTab";
 import SearchTab from "./SearchTab";
 import GraphTab from "./GraphTab";
+import DigestTab from "./DigestTab";
 import type { User } from "@supabase/supabase-js";
 
 export type Capture = {
@@ -19,7 +20,7 @@ export type Capture = {
   created_at: string;
 };
 
-type Tab = "capture" | "search" | "graph";
+type Tab = "capture" | "search" | "graph" | "digest";
 
 const TYPE_COLORS: Record<string, string> = {
   Idea: "text-amber",
@@ -32,9 +33,10 @@ const TYPE_COLORS: Record<string, string> = {
 export { TYPE_COLORS };
 
 const TABS: { id: Tab; label: string; icon: string; activeColor: string }[] = [
-  { id: "capture", label: "capture", icon: "✦", activeColor: "text-amber" },
-  { id: "search",  label: "search",  icon: "⌕", activeColor: "text-blue"  },
-  { id: "graph",   label: "graph",   icon: "◉", activeColor: "text-green" },
+  { id: "capture", label: "capture", icon: "✦", activeColor: "text-amber"  },
+  { id: "search",  label: "search",  icon: "⌕", activeColor: "text-blue"   },
+  { id: "graph",   label: "graph",   icon: "◉", activeColor: "text-green"  },
+  { id: "digest",  label: "digest",  icon: "◈", activeColor: "text-purple" },
 ];
 
 export default function BrainClient({
@@ -44,18 +46,45 @@ export default function BrainClient({
   user: User;
   initialCaptures: Capture[];
 }) {
-  const [tab, setTab] = useState<Tab>("capture");
+  const [tab, setTab]           = useState<Tab>("capture");
   const [captures, setCaptures] = useState<Capture[]>(initialCaptures);
-  const router = useRouter();
+  const [syncing, setSyncing]   = useState(false);
+  const router   = useRouter();
   const supabase = createClient();
 
-  const refreshCaptures = useCallback(async () => {
-    const { data } = await supabase
-      .from("captures")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (data) setCaptures(data);
+  // ── Visibility-based sync (free alternative to Realtime) ─────
+  const sync = useCallback(async (quiet = false) => {
+    if (!quiet) setSyncing(true);
+    try {
+      const { data } = await supabase
+        .from("captures")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (data) setCaptures(data);
+    } finally {
+      if (!quiet) setSyncing(false);
+    }
   }, [supabase]);
+
+  useEffect(() => {
+    // Sync when tab becomes visible (switch device, lock/unlock screen)
+    function onVisibility() {
+      if (document.visibilityState === "visible") sync(true);
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+
+    // Passive poll every 60s while tab is active
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") sync(true);
+    }, 60_000);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      clearInterval(interval);
+    };
+  }, [sync]);
+
+  const refreshCaptures = useCallback(() => sync(), [sync]);
 
   async function signOut() {
     await supabase.auth.signOut();
@@ -66,7 +95,7 @@ export default function BrainClient({
     <div className="min-h-screen bg-bg flex flex-col">
       {/* Header */}
       <header className="bg-surface border-b border-border px-4 py-3 flex items-center justify-between sticky top-0 z-20">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <span className="text-amber">▣</span>
             <span className="text-amber font-bold text-sm tracking-tight">second_brain</span>
@@ -88,13 +117,21 @@ export default function BrainClient({
             ))}
           </nav>
         </div>
+
         <div className="flex items-center gap-3">
+          {/* Sync indicator */}
+          <button
+            onClick={() => sync()}
+            className="flex items-center gap-1 text-xs text-muted hover:text-text transition-colors"
+            title="sync now"
+          >
+            <span className={syncing ? "animate-spin text-amber" : "text-green"}>
+              {syncing ? "↻" : "■"}
+            </span>
+            <span className="hidden sm:inline">{captures.length} captures</span>
+            <span className="sm:hidden">{captures.length}</span>
+          </button>
           <span className="text-xs text-muted hidden sm:block">{user.email}</span>
-          <span className="text-xs text-muted">
-            <span className="text-green">■</span>{" "}
-            <span className="hidden xs:inline">{captures.length} captures</span>
-            <span className="xs:hidden">{captures.length}</span>
-          </span>
           <button
             onClick={signOut}
             className="text-xs text-muted hover:text-amber transition-colors px-2 py-1 border border-border rounded hover:border-amber"
@@ -104,15 +141,12 @@ export default function BrainClient({
         </div>
       </header>
 
-      {/* Main — extra bottom padding on mobile for nav */}
+      {/* Main */}
       <main className="flex-1 container mx-auto max-w-5xl px-4 py-5 pb-24 sm:pb-6">
-        {tab === "capture" && (
-          <CaptureTab captures={captures} setCaptures={setCaptures} />
-        )}
-        {tab === "search" && <SearchTab captures={captures} />}
-        {tab === "graph" && (
-          <GraphTab captures={captures} onRelatesUpdated={refreshCaptures} />
-        )}
+        {tab === "capture" && <CaptureTab captures={captures} setCaptures={setCaptures} />}
+        {tab === "search"  && <SearchTab  captures={captures} />}
+        {tab === "graph"   && <GraphTab   captures={captures} onRelatesUpdated={refreshCaptures} />}
+        {tab === "digest"  && <DigestTab  captures={captures} userId={user.id} />}
       </main>
 
       {/* Mobile bottom nav */}
