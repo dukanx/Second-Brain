@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background (solid for maskable safe zone) -->
+  <rect width="512" height="512" fill="#0d1117"/>
+  <!-- Outer square frame -->
+  <rect x="108" y="108" width="296" height="296" fill="none" stroke="#f59e0b" stroke-width="26" rx="10"/>
+  <!-- Inner filled square -->
+  <rect x="190" y="190" width="132" height="132" rx="5" fill="#f59e0b"/>
+</svg>

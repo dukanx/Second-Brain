@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import type { Capture } from "./BrainClient";
 import { TYPE_COLORS } from "./BrainClient";
 
@@ -12,6 +12,10 @@ const PROJECT_COLORS: Record<string, string> = {
   Other: "text-muted",
 };
 
+const TYPES = ["All", "Idea", "Link", "Task", "Learning", "Note"];
+const PROJECTS = ["All", "Village Booker", "Glumac Plus", "FON", "Personal", "Other"];
+type SortKey = "newest" | "oldest" | "connections";
+
 export default function CaptureTab({
   captures,
   setCaptures,
@@ -22,13 +26,21 @@ export default function CaptureTab({
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Capture | null>(null);
+  const [relateStatus, setRelateStatus] = useState("");
   const [error, setError] = useState("");
+
+  // Filters
+  const [filterType, setFilterType] = useState("All");
+  const [filterProject, setFilterProject] = useState("All");
+  const [sort, setSort] = useState<SortKey>("newest");
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const save = useCallback(async () => {
     if (!text.trim() || saving) return;
     setSaving(true);
     setError("");
+    setRelateStatus("");
     try {
       const res = await fetch("/api/capture", {
         method: "POST",
@@ -37,10 +49,33 @@ export default function CaptureTab({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to save");
+
       setCaptures((prev) => [data.capture, ...prev]);
       setLastSaved(data.capture);
       setText("");
       textareaRef.current?.focus();
+
+      // Relate in background, show feedback
+      setRelateStatus("finding connections...");
+      fetch("/api/relate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ captureId: data.capture.id }),
+      })
+        .then((r) => r.json())
+        .then((rd) => {
+          const count = rd.relatedIds?.length ?? 0;
+          setRelateStatus(count > 0 ? `→ ${count} connection${count > 1 ? "s" : ""} found` : "");
+          if (count > 0) {
+            setCaptures((prev) =>
+              prev.map((c) =>
+                c.id === data.capture.id ? { ...c, related_ids: rd.relatedIds } : c
+              )
+            );
+          }
+          setTimeout(() => setRelateStatus(""), 4000);
+        })
+        .catch(() => setRelateStatus(""));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
     } finally {
@@ -49,18 +84,27 @@ export default function CaptureTab({
   }, [text, saving, setCaptures]);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && e.ctrlKey) {
-      e.preventDefault();
-      save();
-    }
+    if (e.key === "Enter" && e.ctrlKey) { e.preventDefault(); save(); }
   }
+
+  const filtered = useMemo(() => {
+    let list = [...captures];
+    if (filterType !== "All") list = list.filter((c) => c.type === filterType);
+    if (filterProject !== "All") list = list.filter((c) => c.project === filterProject);
+    if (sort === "oldest") list.reverse();
+    else if (sort === "connections") list.sort((a, b) => (b.related_ids?.length ?? 0) - (a.related_ids?.length ?? 0));
+    return list;
+  }, [captures, filterType, filterProject, sort]);
+
+  const isUrl = text.trim().startsWith("http");
 
   return (
     <div className="space-y-4 animate-fade-in">
-      {/* Input area */}
+      {/* Input */}
       <div className="bg-surface terminal-border rounded-lg overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-2 border-b border-border">
           <span className="text-amber text-xs">capture</span>
+          {isUrl && <span className="text-blue text-xs ml-1">// url detected — AI will fetch metadata</span>}
           <span className="text-muted text-xs ml-auto hidden sm:inline">ctrl+enter to save</span>
         </div>
         <textarea
@@ -73,7 +117,6 @@ export default function CaptureTab({
           autoFocus
           disabled={saving}
         />
-        {/* Footer bar with count + save */}
         <div className="flex items-center justify-between gap-3 px-4 py-2 border-t border-border">
           <span className="text-xs text-muted">{text.length} chars</span>
           <button
@@ -87,13 +130,6 @@ export default function CaptureTab({
       </div>
 
       {/* Status */}
-      {saving && (
-        <div className="text-xs text-amber animate-pulse-slow flex items-center gap-2">
-          <span>▸</span>
-          <span>AI categorizing...</span>
-        </div>
-      )}
-
       {error && (
         <div className="text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded px-3 py-2">
           error: {error}
@@ -106,33 +142,88 @@ export default function CaptureTab({
             <span className="text-green">✓</span>
             <span className="text-green font-bold truncate">{lastSaved.title}</span>
           </div>
-          <div className="flex gap-3 text-muted flex-wrap">
-            <span>
-              type: <span className={TYPE_COLORS[lastSaved.type] ?? "text-muted"}>{lastSaved.type}</span>
-            </span>
-            <span>
-              project:{" "}
-              <span className={PROJECT_COLORS[lastSaved.project] ?? "text-muted"}>
-                {lastSaved.project}
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex gap-3 text-muted">
+              <span>type: <span className={TYPE_COLORS[lastSaved.type] ?? "text-muted"}>{lastSaved.type}</span></span>
+              <span>project: <span className={PROJECT_COLORS[lastSaved.project] ?? "text-muted"}>{lastSaved.project}</span></span>
+            </div>
+            {relateStatus && (
+              <span className={`text-xs ${relateStatus.startsWith("→") ? "text-purple" : "text-muted animate-pulse"}`}>
+                {relateStatus}
               </span>
-            </span>
+            )}
           </div>
         </div>
       )}
 
+      {/* Filter bar */}
+      <div className="space-y-2">
+        {/* Type filter */}
+        <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+          {TYPES.map((t) => (
+            <button
+              key={t}
+              onClick={() => setFilterType(t)}
+              className={`shrink-0 text-xs px-2.5 py-1 rounded border transition-colors ${
+                filterType === t
+                  ? "border-amber text-amber bg-amber/10"
+                  : "border-border text-muted hover:text-text"
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
+        {/* Project filter + sort */}
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar flex-1">
+            {PROJECTS.map((p) => (
+              <button
+                key={p}
+                onClick={() => setFilterProject(p)}
+                className={`shrink-0 text-xs px-2.5 py-1 rounded border transition-colors ${
+                  filterProject === p
+                    ? "border-purple text-purple bg-purple/10"
+                    : "border-border text-muted hover:text-text"
+                }`}
+              >
+                {p === "Village Booker" ? "VB" : p === "Glumac Plus" ? "GP" : p}
+              </button>
+            ))}
+          </div>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as SortKey)}
+            className="shrink-0 text-xs bg-surface border border-border text-muted rounded px-2 py-1 focus:outline-none focus:border-text"
+          >
+            <option value="newest">newest</option>
+            <option value="oldest">oldest</option>
+            <option value="connections">connections</option>
+          </select>
+        </div>
+      </div>
+
       {/* Captures list */}
       <div>
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-xs text-muted">// recent captures ({captures.length})</span>
-        </div>
-        <div className="space-y-2">
-          {captures.slice(0, 30).map((capture) => (
-            <CaptureCard key={capture.id} capture={capture} />
+        <span className="text-xs text-muted">
+          // {filtered.length} of {captures.length} captures
+        </span>
+        <div className="space-y-2 mt-3">
+          {filtered.slice(0, 50).map((capture) => (
+            <CaptureCard
+              key={capture.id}
+              capture={capture}
+              onUpdate={(updated) =>
+                setCaptures((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
+              }
+              onDelete={(id) =>
+                setCaptures((prev) => prev.filter((c) => c.id !== id))
+              }
+            />
           ))}
-          {captures.length === 0 && (
-            <p className="text-xs text-muted py-8 text-center">
-              no captures yet — start typing above
-            </p>
+          {filtered.length === 0 && (
+            <p className="text-xs text-muted py-8 text-center">no captures match filters</p>
           )}
         </div>
       </div>
@@ -140,42 +231,186 @@ export default function CaptureTab({
   );
 }
 
-function CaptureCard({ capture }: { capture: Capture }) {
+function CaptureCard({
+  capture,
+  onUpdate,
+  onDelete,
+}: {
+  capture: Capture;
+  onUpdate: (c: Capture) => void;
+  onDelete: (id: string) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
+  const [mode, setMode] = useState<"view" | "edit" | "confirmDelete">("view");
+  const [editText, setEditText] = useState(capture.text);
+  const [editTitle, setEditTitle] = useState(capture.title);
+  const [editType, setEditType] = useState(capture.type);
+  const [editProject, setEditProject] = useState(capture.project);
+  const [saving, setSaving] = useState(false);
+
   const date = new Date(capture.created_at).toLocaleDateString("sr", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "2-digit",
+    day: "2-digit", month: "2-digit", year: "2-digit",
   });
 
+  async function saveEdit() {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/capture/${capture.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: editText, title: editTitle, type: editType, project: editProject }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      onUpdate(data.capture);
+      setMode("view");
+    } catch {
+      // keep edit mode open on error
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function confirmDelete() {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/capture/${capture.id}`, { method: "DELETE" });
+      if (res.ok) onDelete(capture.id);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function startEdit() {
+    setEditText(capture.text);
+    setEditTitle(capture.title);
+    setEditType(capture.type);
+    setEditProject(capture.project);
+    setMode("edit");
+    setExpanded(true);
+  }
+
   return (
-    <div
-      className="bg-surface terminal-border rounded px-4 py-3 cursor-pointer active:bg-border transition-colors group"
-      onClick={() => setExpanded((e) => !e)}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className={`text-xs shrink-0 ${TYPE_COLORS[capture.type] ?? "text-muted"}`}>
-            [{capture.type}]
-          </span>
-          <span className="text-sm text-text truncate">{capture.title}</span>
-        </div>
+    <div className="bg-surface terminal-border rounded overflow-hidden">
+      {/* Card header */}
+      <div
+        className="flex items-center gap-2 px-4 py-3 cursor-pointer active:bg-border transition-colors"
+        onClick={() => mode === "view" && setExpanded((e) => !e)}
+      >
+        <span className={`text-xs shrink-0 ${TYPE_COLORS[capture.type] ?? "text-muted"}`}>
+          [{capture.type}]
+        </span>
+        <span className="text-sm text-text truncate flex-1">{capture.title}</span>
         <div className="flex items-center gap-2 shrink-0">
           {capture.related_ids?.length > 0 && (
             <span className="text-xs text-purple">~{capture.related_ids.length}</span>
           )}
           <span className="text-xs text-muted">{date}</span>
-          <span className="text-xs text-muted">{expanded ? "▴" : "▾"}</span>
+          {mode === "view" && (
+            <span className="text-xs text-muted">{expanded ? "▴" : "▾"}</span>
+          )}
         </div>
       </div>
-      {expanded && (
-        <div className="mt-3 pt-3 border-t border-border animate-fade-in">
-          <p className="text-xs text-muted leading-relaxed whitespace-pre-wrap">{capture.text}</p>
-          <div className="mt-2 flex gap-3 text-xs text-muted flex-wrap">
-            <span>project: <span className="text-text">{capture.project}</span></span>
-            {capture.related_ids?.length > 0 && (
-              <span>links: <span className="text-purple">{capture.related_ids.length}</span></span>
-            )}
+
+      {/* Expanded content */}
+      {expanded && mode === "view" && (
+        <div className="px-4 pb-4 border-t border-border pt-3 animate-fade-in">
+          <p className="text-xs text-muted leading-relaxed whitespace-pre-wrap mb-3">{capture.text}</p>
+          <div className="flex items-center justify-between">
+            <div className="flex gap-3 text-xs text-muted">
+              <span>{capture.project}</span>
+              {capture.related_ids?.length > 0 && (
+                <span className="text-purple">{capture.related_ids.length} links</span>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={startEdit}
+                className="text-xs text-muted hover:text-blue transition-colors px-2 py-0.5 border border-border rounded hover:border-blue"
+              >
+                edit
+              </button>
+              <button
+                onClick={() => setMode("confirmDelete")}
+                className="text-xs text-muted hover:text-red-400 transition-colors px-2 py-0.5 border border-border rounded hover:border-red-400"
+              >
+                delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit mode */}
+      {mode === "edit" && (
+        <div className="px-4 pb-4 border-t border-border pt-3 space-y-3 animate-fade-in">
+          <input
+            value={editTitle}
+            onChange={(e) => setEditTitle(e.target.value)}
+            className="w-full bg-bg border border-border rounded px-3 py-2 text-xs text-text focus:outline-none focus:border-amber font-mono"
+            placeholder="title"
+          />
+          <textarea
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+            className="w-full bg-bg border border-border rounded px-3 py-2 text-xs text-text focus:outline-none focus:border-amber font-mono resize-none min-h-[80px] leading-relaxed"
+          />
+          <div className="flex gap-2">
+            <select
+              value={editType}
+              onChange={(e) => setEditType(e.target.value)}
+              className="text-xs bg-bg border border-border text-muted rounded px-2 py-1.5 focus:outline-none flex-1"
+            >
+              {["Idea", "Link", "Task", "Learning", "Note"].map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+            <select
+              value={editProject}
+              onChange={(e) => setEditProject(e.target.value)}
+              className="text-xs bg-bg border border-border text-muted rounded px-2 py-1.5 focus:outline-none flex-1"
+            >
+              {["Village Booker", "Glumac Plus", "FON", "Personal", "Other"].map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button
+              onClick={() => setMode("view")}
+              className="text-xs px-3 py-1.5 border border-border text-muted rounded hover:text-text transition-colors"
+            >
+              cancel
+            </button>
+            <button
+              onClick={saveEdit}
+              disabled={saving}
+              className="text-xs px-3 py-1.5 bg-amber text-bg rounded font-bold hover:bg-yellow-400 disabled:opacity-50 transition-colors"
+            >
+              {saving ? "saving..." : "save()"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation */}
+      {mode === "confirmDelete" && (
+        <div className="px-4 py-3 border-t border-border flex items-center justify-between animate-fade-in">
+          <span className="text-xs text-red-400">delete this capture?</span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setMode("view")}
+              className="text-xs px-3 py-1 border border-border text-muted rounded hover:text-text transition-colors"
+            >
+              cancel
+            </button>
+            <button
+              onClick={confirmDelete}
+              disabled={saving}
+              className="text-xs px-3 py-1 bg-red-500/20 border border-red-500/40 text-red-400 rounded hover:bg-red-500/30 disabled:opacity-50 transition-colors"
+            >
+              {saving ? "..." : "delete"}
+            </button>
           </div>
         </div>
       )}

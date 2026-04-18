@@ -37,6 +37,10 @@ body {
 }
 
 @layer utilities {
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+
   .terminal-border {
     border: 1px solid #1a2332;
   }
