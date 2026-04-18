@@ -14,7 +14,7 @@ export async function POST() {
     .select("id, title, text, type, project, related_ids, created_at")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
-    .limit(120);
+    .limit(80);
 
   if (!captures || captures.length === 0) {
     return NextResponse.json({ error: "No captures yet" }, { status: 400 });
@@ -23,21 +23,21 @@ export async function POST() {
   const catalogue = captures
     .map((c) => {
       const age = Math.floor((Date.now() - new Date(c.created_at).getTime()) / 86400000);
-      return `[${c.id}] [${c.type}/${c.project}] (${age}d ago) ${c.title}: ${c.text.slice(0, 120)}`;
+      return `${c.id}|${c.type}|${c.project}|${age}d| ${c.title}: ${c.text.slice(0, 70)}`;
     })
     .join("\n");
 
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 1024,
-    system: `You are a personal knowledge analyst. Analyze the user's second brain captures and return ONLY valid JSON with:
-- themes: string[] — 4-6 recurring topics or themes you see across captures
-- pendingTasks: {id:string, title:string}[] — Task captures that likely need attention (max 5)
-- forgottenIdeas: {id:string, title:string}[] — older Idea/Learning captures with few connections worth revisiting (max 4)
-- patterns: string — 2-3 sentences on interesting patterns, contradictions or connections you noticed
-- suggestion: string — one specific, actionable suggestion for what to explore or do next
+    max_tokens: 2048,
+    system: `You are a personal knowledge analyst. Analyze the captures and return ONLY valid JSON with these exact fields (keep strings SHORT):
+- themes: string[] — 4-5 short phrases (max 4 words each)
+- pendingTasks: {id:string,title:string}[] — up to 5 Task captures needing attention; use the full UUID from the original data
+- forgottenIdeas: {id:string,title:string}[] — up to 4 older Idea/Learning captures worth revisiting; use the full UUID
+- patterns: string — max 2 sentences
+- suggestion: string — max 1 sentence, actionable
 
-Return ONLY the JSON object.`,
+Return ONLY the JSON object. Keep all strings concise.`,
     messages: [{ role: "user", content: catalogue }],
   });
 

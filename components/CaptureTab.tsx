@@ -4,6 +4,14 @@ import { useState, useRef, useCallback, useMemo } from "react";
 import type { Capture } from "./BrainClient";
 import { TYPE_COLORS } from "./BrainClient";
 
+const TEMPLATES: { label: string; prefix: string; type: string }[] = [
+  { label: "task",     prefix: "[ ] ",    type: "Task"     },
+  { label: "idea",     prefix: "Idea: ",  type: "Idea"     },
+  { label: "TIL",      prefix: "TIL: ",   type: "Learning" },
+  { label: "link",     prefix: "",         type: "Link"     },
+  { label: "note",     prefix: "",         type: "Note"     },
+];
+
 const PROJECT_COLORS: Record<string, string> = {
   "Village Booker": "text-amber",
   "Glumac Plus": "text-purple",
@@ -28,6 +36,9 @@ export default function CaptureTab({
   const [lastSaved, setLastSaved] = useState<Capture | null>(null);
   const [relateStatus, setRelateStatus] = useState("");
   const [error, setError] = useState("");
+  const [recording, setRecording] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
 
   // Filters
   const [filterType, setFilterType] = useState("All");
@@ -87,6 +98,37 @@ export default function CaptureTab({
     if (e.key === "Enter" && e.ctrlKey) { e.preventDefault(); save(); }
   }
 
+  function applyTemplate(prefix: string) {
+    setText((prev) => (prev ? prev : prefix));
+    textareaRef.current?.focus();
+  }
+
+  function toggleRecording() {
+    if (recording) {
+      recognitionRef.current?.stop();
+      setRecording(false);
+      return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    const SR = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+    if (!SR) { setError("Voice not supported in this browser"); return; }
+    const r = new SR();
+    r.continuous = true;
+    r.interimResults = false;
+    r.lang = "en-US";
+    r.onresult = (e: { results: { [key: number]: { [key: number]: { transcript: string } } } }) => {
+      const transcript = Array.from(Object.values(e.results) as { [key: number]: { transcript: string } }[])
+        .map((res) => res[0].transcript).join(" ");
+      setText((prev) => (prev ? prev + " " + transcript : transcript));
+    };
+    r.onerror = () => { setRecording(false); };
+    r.onend = () => { setRecording(false); };
+    recognitionRef.current = r;
+    r.start();
+    setRecording(true);
+  }
+
   const filtered = useMemo(() => {
     let list = [...captures];
     if (filterType !== "All") list = list.filter((c) => c.type === filterType);
@@ -107,6 +149,17 @@ export default function CaptureTab({
           {isUrl && <span className="text-blue text-xs ml-1">// url detected — AI will fetch metadata</span>}
           <span className="text-muted text-xs ml-auto hidden sm:inline">ctrl+enter to save</span>
         </div>
+        <div className="flex gap-1.5 px-4 pt-2 flex-wrap">
+          {TEMPLATES.map((t) => (
+            <button
+              key={t.label}
+              onClick={() => applyTemplate(t.prefix)}
+              className="text-[10px] px-2 py-0.5 border border-border text-muted rounded hover:text-amber hover:border-amber transition-colors"
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
         <textarea
           ref={textareaRef}
           value={text}
@@ -118,7 +171,16 @@ export default function CaptureTab({
           disabled={saving}
         />
         <div className="flex items-center justify-between gap-3 px-4 py-2 border-t border-border">
-          <span className="text-xs text-muted">{text.length} chars</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted">{text.length} chars</span>
+            <button
+              onClick={toggleRecording}
+              title={recording ? "stop recording" : "voice capture"}
+              className={`text-sm leading-none transition-colors ${recording ? "text-red-400 animate-pulse" : "text-muted hover:text-amber"}`}
+            >
+              {recording ? "⏹" : "🎤"}
+            </button>
+          </div>
           <button
             onClick={save}
             disabled={!text.trim() || saving}

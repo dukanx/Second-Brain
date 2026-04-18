@@ -7,6 +7,8 @@ import CaptureTab from "./CaptureTab";
 import SearchTab from "./SearchTab";
 import GraphTab from "./GraphTab";
 import DigestTab from "./DigestTab";
+import GrowthTab from "./GrowthTab";
+import SearchOverlay from "./SearchOverlay";
 import type { User } from "@supabase/supabase-js";
 
 export type Capture = {
@@ -20,7 +22,7 @@ export type Capture = {
   created_at: string;
 };
 
-type Tab = "capture" | "search" | "graph" | "digest";
+type Tab = "capture" | "search" | "graph" | "digest" | "grow";
 
 const TYPE_COLORS: Record<string, string> = {
   Idea: "text-amber",
@@ -37,6 +39,7 @@ const TABS: { id: Tab; label: string; icon: string; activeColor: string }[] = [
   { id: "search",  label: "search",  icon: "⌕", activeColor: "text-blue"   },
   { id: "graph",   label: "graph",   icon: "◉", activeColor: "text-green"  },
   { id: "digest",  label: "digest",  icon: "◈", activeColor: "text-purple" },
+  { id: "grow",    label: "grow",    icon: "✺", activeColor: "text-green"  },
 ];
 
 export default function BrainClient({
@@ -49,6 +52,7 @@ export default function BrainClient({
   const [tab, setTab]           = useState<Tab>("capture");
   const [captures, setCaptures] = useState<Capture[]>(initialCaptures);
   const [syncing, setSyncing]   = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const router   = useRouter();
   const supabase = createClient();
 
@@ -84,6 +88,17 @@ export default function BrainClient({
     };
   }, [sync]);
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setSearchOpen((o) => !o);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const refreshCaptures = useCallback(() => sync(), [sync]);
 
   async function signOut() {
@@ -93,6 +108,7 @@ export default function BrainClient({
 
   return (
     <div className="min-h-screen bg-bg flex flex-col">
+      {searchOpen && <SearchOverlay captures={captures} onClose={() => setSearchOpen(false)} />}
       {/* Header */}
       <header className="bg-surface border-b border-border px-4 py-3 flex items-center justify-between sticky top-0 z-20">
         <div className="flex items-center gap-3">
@@ -119,6 +135,14 @@ export default function BrainClient({
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="flex items-center gap-1.5 text-xs text-muted hover:text-text border border-border rounded px-2 py-1 transition-colors"
+            title="Search (⌘K)"
+          >
+            <span>⌕</span>
+            <kbd className="hidden sm:inline text-[10px] border border-border rounded px-1">⌘K</kbd>
+          </button>
           {/* Sync indicator */}
           <button
             onClick={() => sync()}
@@ -147,6 +171,7 @@ export default function BrainClient({
         {tab === "search"  && <SearchTab  captures={captures} />}
         {tab === "graph"   && <GraphTab   captures={captures} onRelatesUpdated={refreshCaptures} />}
         {tab === "digest"  && <DigestTab  captures={captures} userId={user.id} />}
+        {tab === "grow"    && <GrowthTab  captures={captures} setCaptures={setCaptures} />}
       </main>
 
       {/* Mobile bottom nav */}
