@@ -11,8 +11,8 @@ export const metadata: Metadata = {
     title: "SecondBrain",
   },
   icons: {
-    icon: "/icon.svg",
-    apple: "/SBicon.png",
+    icon: "/SBicon.png",
+    apple: "/SBiconWhite.png",
   },
 };
 
