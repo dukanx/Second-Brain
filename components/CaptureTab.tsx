@@ -43,6 +43,7 @@ export default function CaptureTab({
   // Filters
   const [filterType, setFilterType] = useState("All");
   const [filterProject, setFilterProject] = useState("All");
+  const [filterStarred, setFilterStarred] = useState(false);
   const [sort, setSort] = useState<SortKey>("newest");
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -131,12 +132,13 @@ export default function CaptureTab({
 
   const filtered = useMemo(() => {
     let list = [...captures];
+    if (filterStarred) list = list.filter((c) => c.starred);
     if (filterType !== "All") list = list.filter((c) => c.type === filterType);
     if (filterProject !== "All") list = list.filter((c) => c.project === filterProject);
     if (sort === "oldest") list.reverse();
     else if (sort === "connections") list.sort((a, b) => (b.related_ids?.length ?? 0) - (a.related_ids?.length ?? 0));
     return list;
-  }, [captures, filterType, filterProject, sort]);
+  }, [captures, filterStarred, filterType, filterProject, sort]);
 
   const isUrl = text.trim().startsWith("http");
 
@@ -222,6 +224,16 @@ export default function CaptureTab({
       <div className="space-y-2">
         {/* Type filter */}
         <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+          <button
+            onClick={() => setFilterStarred((s) => !s)}
+            className={`shrink-0 text-xs px-2.5 py-1 rounded border transition-colors ${
+              filterStarred
+                ? "border-amber text-amber bg-amber/10"
+                : "border-border text-muted hover:text-text"
+            }`}
+          >
+            ★
+          </button>
           {TYPES.map((t) => (
             <button
               key={t}
@@ -282,6 +294,9 @@ export default function CaptureTab({
               onDelete={(id) =>
                 setCaptures((prev) => prev.filter((c) => c.id !== id))
               }
+              onStar={(id, starred) =>
+                setCaptures((prev) => prev.map((c) => (c.id === id ? { ...c, starred } : c)))
+              }
             />
           ))}
           {filtered.length === 0 && (
@@ -297,10 +312,12 @@ function CaptureCard({
   capture,
   onUpdate,
   onDelete,
+  onStar,
 }: {
   capture: Capture;
   onUpdate: (c: Capture) => void;
   onDelete: (id: string) => void;
+  onStar: (id: string, starred: boolean) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [mode, setMode] = useState<"view" | "edit" | "confirmDelete">("view");
@@ -363,7 +380,21 @@ function CaptureCard({
           [{capture.type}]
         </span>
         <span className="text-sm text-text truncate flex-1">{capture.title}</span>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => {
+              const next = !capture.starred;
+              onStar(capture.id, next);
+              fetch(`/api/capture/${capture.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ starred: next }),
+              });
+            }}
+            className={`text-sm leading-none transition-colors ${capture.starred ? "text-amber" : "text-muted hover:text-amber"}`}
+          >
+            {capture.starred ? "★" : "☆"}
+          </button>
           {capture.related_ids?.length > 0 && (
             <span className="text-xs text-purple">~{capture.related_ids.length}</span>
           )}

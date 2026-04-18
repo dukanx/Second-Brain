@@ -20,6 +20,7 @@ export type Capture = {
   project: string;
   related_ids: string[];
   created_at: string;
+  starred: boolean;
 };
 
 type Tab = "capture" | "search" | "graph" | "digest" | "grow";
