@@ -142,6 +142,32 @@ export default function CaptureTab({
 
   const isUrl = text.trim().startsWith("http");
 
+  function exportJSON() {
+    const blob = new Blob([JSON.stringify(captures, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `second-brain-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportMarkdown() {
+    const lines = captures.map((c) => {
+      const date = new Date(c.created_at).toLocaleDateString("sr", { day: "2-digit", month: "2-digit", year: "2-digit" });
+      const star = c.starred ? " ★" : "";
+      return `## ${c.title}${star}\n**Type:** ${c.type} | **Project:** ${c.project} | **Date:** ${date}\n\n${c.text}\n\n---`;
+    });
+    const md = `# Second Brain Export\n*${new Date().toLocaleDateString()}*\n\n---\n\n${lines.join("\n\n")}`;
+    const blob = new Blob([md], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `second-brain-${new Date().toISOString().slice(0, 10)}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="space-y-4 animate-fade-in">
       {/* Input */}
@@ -280,9 +306,25 @@ export default function CaptureTab({
 
       {/* Captures list */}
       <div>
-        <span className="text-xs text-muted">
-          // {filtered.length} of {captures.length} captures
-        </span>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted">
+            // {filtered.length} of {captures.length} captures
+          </span>
+          <div className="flex gap-1.5">
+            <button
+              onClick={exportMarkdown}
+              className="text-[10px] text-muted hover:text-text border border-border rounded px-2 py-0.5 transition-colors"
+            >
+              export .md
+            </button>
+            <button
+              onClick={exportJSON}
+              className="text-[10px] text-muted hover:text-text border border-border rounded px-2 py-0.5 transition-colors"
+            >
+              export .json
+            </button>
+          </div>
+        </div>
         <div className="space-y-2 mt-3">
           {filtered.slice(0, 50).map((capture) => (
             <CaptureCard
