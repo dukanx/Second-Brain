@@ -57,6 +57,7 @@ export default function BrainClient({
   const [captures, setCaptures] = useState<Capture[]>(initialCaptures);
   const [syncing, setSyncing]   = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [notifStatus, setNotifStatus] = useState<"unknown" | "granted" | "denied">("unknown");
   const router   = useRouter();
   const supabase = createClient();
 
@@ -91,6 +92,34 @@ export default function BrainClient({
       clearInterval(interval);
     };
   }, [sync]);
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+    setNotifStatus(Notification.permission === "granted" ? "granted" : Notification.permission === "denied" ? "denied" : "unknown");
+  }, []);
+
+  async function enableNotifications() {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") { setNotifStatus("denied"); return; }
+    setNotifStatus("granted");
+    const reg = await navigator.serviceWorker.ready;
+    const raw = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!
+      .replace(/-/g, "+").replace(/_/g, "/");
+    const binary = atob(raw);
+    const key = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) key[i] = binary.charCodeAt(i);
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: key,
+    });
+    await fetch("/api/push/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subscription: sub }),
+    });
+  }
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -139,6 +168,15 @@ export default function BrainClient({
         </div>
 
         <div className="flex items-center gap-3">
+          {notifStatus !== "granted" && notifStatus !== "denied" && (
+            <button
+              onClick={enableNotifications}
+              className="text-xs text-muted hover:text-amber border border-border rounded px-2 py-1 transition-colors hidden sm:block"
+              title="Enable review reminders"
+            >
+              🔔
+            </button>
+          )}
           <button
             onClick={() => setSearchOpen(true)}
             className="flex items-center gap-1.5 text-xs text-muted hover:text-text border border-border rounded px-2 py-1 transition-colors"
