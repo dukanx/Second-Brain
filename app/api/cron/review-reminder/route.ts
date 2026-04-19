@@ -2,13 +2,12 @@ import { createServiceClient } from "@/lib/supabase/server";
 import webpush from "web-push";
 import { NextResponse } from "next/server";
 
-webpush.setVapidDetails(
-  process.env.VAPID_EMAIL!,
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-);
-
 export async function GET(request: Request) {
+  webpush.setVapidDetails(
+    process.env.VAPID_EMAIL!,
+    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+    process.env.VAPID_PRIVATE_KEY!
+  );
   const auth = request.headers.get("authorization");
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
