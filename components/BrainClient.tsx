@@ -8,6 +8,7 @@ import SearchTab from "./SearchTab";
 import GraphTab from "./GraphTab";
 import DigestTab from "./DigestTab";
 import GrowthTab from "./GrowthTab";
+import ChatTab from "./ChatTab";
 import SearchOverlay from "./SearchOverlay";
 import type { User } from "@supabase/supabase-js";
 
@@ -24,7 +25,7 @@ export type Capture = {
   last_reviewed_at: string | null;
 };
 
-type Tab = "capture" | "search" | "graph" | "digest" | "grow";
+type Tab = "capture" | "search" | "graph" | "digest" | "grow" | "chat";
 
 const TYPE_COLORS: Record<string, string> = {
   Idea: "text-amber",
@@ -42,6 +43,7 @@ const TABS: { id: Tab; label: string; icon: string; activeColor: string }[] = [
   { id: "graph",   label: "graph",   icon: "◉", activeColor: "text-green"  },
   { id: "digest",  label: "digest",  icon: "◈", activeColor: "text-purple" },
   { id: "grow",    label: "grow",    icon: "✺", activeColor: "text-green"  },
+  { id: "chat",    label: "chat",    icon: "◇", activeColor: "text-purple" },
 ];
 
 export default function BrainClient({
@@ -174,6 +176,7 @@ export default function BrainClient({
         {tab === "graph"   && <GraphTab   captures={captures} onRelatesUpdated={refreshCaptures} />}
         {tab === "digest"  && <DigestTab  captures={captures} userId={user.id} />}
         {tab === "grow"    && <GrowthTab  captures={captures} setCaptures={setCaptures} />}
+        {tab === "chat"    && <ChatTab    captures={captures} />}
       </main>
 
       {/* Mobile bottom nav */}
