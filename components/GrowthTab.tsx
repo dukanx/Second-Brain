@@ -9,6 +9,32 @@ function dateKey(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
+function buildMonthGrid(captures: Capture[], year: number, month: number) {
+  const countByDay: Record<string, number> = {};
+  captures.forEach((c) => {
+    const k = c.created_at.slice(0, 10);
+    countByDay[k] = (countByDay[k] ?? 0) + 1;
+  });
+
+  const firstDay = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  // Mon-based offset (0=Mon ... 6=Sun)
+  const startOffset = (firstDay.getDay() + 6) % 7;
+
+  const cells: { day: number | null; date: string; count: number }[] = [];
+  for (let i = 0; i < startOffset; i++) cells.push({ day: null, date: "", count: 0 });
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    cells.push({ day: d, date, count: countByDay[date] ?? 0 });
+  }
+  // pad to full weeks
+  while (cells.length % 7 !== 0) cells.push({ day: null, date: "", count: 0 });
+  // split into rows
+  const rows: typeof cells[] = [];
+  for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
+  return rows;
+}
+
 function buildHeatmap(captures: Capture[], weeks: number) {
   const countByDay: Record<string, number> = {};
   captures.forEach((c) => {
@@ -121,7 +147,20 @@ export default function GrowthTab({
     return captures.filter((c) => new Date(c.created_at).getTime() > cutoff).length;
   }, [captures]);
 
-  const heatmap = useMemo(() => buildHeatmap(captures, 26), [captures]);
+  const heatmap = useMemo(() => buildHeatmap(captures, 52), [captures]);
+
+  const [heatmapView, setHeatmapView] = useState<"year" | "month">("year");
+  const [monthOffset, setMonthOffset] = useState(0); // 0 = current month
+  const monthDate = useMemo(() => {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + monthOffset);
+    return d;
+  }, [monthOffset]);
+  const monthGrid = useMemo(
+    () => buildMonthGrid(captures, monthDate.getFullYear(), monthDate.getMonth()),
+    [captures, monthDate]
+  );
 
   const todayKey = dateKey(new Date());
   const todayCount = captures.filter((c) => c.created_at.slice(0, 10) === todayKey).length;
@@ -241,37 +280,124 @@ export default function GrowthTab({
       {/* Heatmap */}
       <div className="bg-surface terminal-border rounded-lg p-4">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-xs text-muted">// activity — last 26 weeks</p>
-          <p className="text-xs text-muted">{captures.length} total captures</p>
-        </div>
-        <div className="flex gap-1 overflow-x-auto pb-1 no-scrollbar">
-          {/* Day labels */}
-          <div className="flex flex-col gap-1 shrink-0 mr-1">
-            {DAY_LABELS.map((d, i) => (
-              <span key={i} className="text-[9px] text-muted h-[11px] flex items-center">{i % 2 === 0 ? d : ""}</span>
-            ))}
+          <p className="text-xs text-amber">// activity</p>
+          <div className="flex items-center gap-2">
+            {heatmapView === "month" && (
+              <div className="flex items-center gap-1">
+                <button onClick={() => setMonthOffset((o) => o - 1)} className="text-muted hover:text-text text-xs px-1">◂</button>
+                <span className="text-xs text-muted w-20 text-center">
+                  {monthDate.toLocaleString("en", { month: "short", year: "numeric" })}
+                </span>
+                <button onClick={() => setMonthOffset((o) => Math.min(0, o + 1))} className="text-muted hover:text-text text-xs px-1">▸</button>
+              </div>
+            )}
+            {heatmapView === "year" && (
+              <span className="text-xs text-muted">last 52 weeks</span>
+            )}
+            <div className="flex border border-border rounded overflow-hidden">
+              <button
+                onClick={() => setHeatmapView("month")}
+                className={`text-[10px] px-2 py-0.5 transition-colors ${heatmapView === "month" ? "bg-amber text-bg font-bold" : "text-muted hover:text-text"}`}
+              >month</button>
+              <button
+                onClick={() => setHeatmapView("year")}
+                className={`text-[10px] px-2 py-0.5 transition-colors ${heatmapView === "year" ? "bg-amber text-bg font-bold" : "text-muted hover:text-text"}`}
+              >year</button>
+            </div>
           </div>
-          {/* Grid */}
-          {heatmap.map((week, wi) => (
-            <div key={wi} className="flex flex-col gap-1 shrink-0">
-              {week.map((cell, di) => (
-                <div
-                  key={di}
-                  title={cell.date ? `${cell.date}: ${cell.count} captures` : ""}
-                  className="w-[11px] h-[11px] rounded-[2px]"
-                  style={{ backgroundColor: cell.count < 0 ? "transparent" : colorForCount(cell.count) }}
-                />
+        </div>
+        {heatmapView === "year" && (
+          <>
+            <div className="flex gap-1 overflow-x-auto pb-1 no-scrollbar">
+              <div className="flex flex-col shrink-0 mr-1 mt-4">
+                {DAY_LABELS.map((d, i) => (
+                  <span key={i} className="text-[9px] text-muted leading-none mb-[3px] h-[11px] flex items-center">
+                    {i % 2 === 0 ? d : ""}
+                  </span>
+                ))}
+              </div>
+              <div className="flex flex-col gap-0">
+                <div className="flex gap-1 mb-1">
+                  {heatmap.map((week, wi) => {
+                    const firstValid = week.find((c) => c.date);
+                    const day = firstValid?.date ? new Date(firstValid.date + "T00:00:00").getDate() : null;
+                    const month = firstValid?.date
+                      ? new Date(firstValid.date + "T00:00:00").toLocaleString("en", { month: "short" })
+                      : null;
+                    return (
+                      <div key={wi} className="w-[11px] shrink-0 text-[8px] text-muted text-center leading-none">
+                        {day !== null && day <= 7 ? month : ""}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex gap-1">
+                  {heatmap.map((week, wi) => (
+                    <div key={wi} className="flex flex-col gap-[3px] shrink-0">
+                      {week.map((cell, di) => (
+                        <div
+                          key={di}
+                          title={cell.date ? `${cell.date}: ${cell.count} capture${cell.count !== 1 ? "s" : ""}` : ""}
+                          className="w-[11px] h-[11px] rounded-[2px] cursor-default"
+                          style={{ backgroundColor: cell.count < 0 ? "transparent" : colorForCount(cell.count) }}
+                        />
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {heatmapView === "month" && (
+          <div className="max-w-xs mx-auto sm:max-w-sm">
+            <div className="grid grid-cols-7 mb-1">
+              {DAY_LABELS.map((d, i) => (
+                <div key={i} className="text-[10px] text-muted text-center py-1">{d}</div>
               ))}
             </div>
-          ))}
-        </div>
-        {/* Scale */}
-        <div className="flex items-center gap-1 mt-2 justify-end">
-          <span className="text-[9px] text-muted">less</span>
-          {AMBER_SCALE.map((c, i) => (
-            <div key={i} className="w-[11px] h-[11px] rounded-[2px]" style={{ backgroundColor: c }} />
-          ))}
-          <span className="text-[9px] text-muted">more</span>
+            <div className="space-y-1">
+              {monthGrid.map((row, ri) => (
+                <div key={ri} className="grid grid-cols-7 gap-1">
+                  {row.map((cell, ci) => (
+                    <div
+                      key={ci}
+                      title={cell.date ? `${cell.date}: ${cell.count} capture${cell.count !== 1 ? "s" : ""}` : ""}
+                      className={`aspect-square rounded flex items-center justify-center text-[11px] font-mono transition-colors ${
+                        !cell.day ? "opacity-0" :
+                        cell.date === todayKey ? "ring-1 ring-amber" : ""
+                      }`}
+                      style={{ backgroundColor: cell.day ? colorForCount(cell.count) : "transparent" }}
+                    >
+                      {cell.day && (
+                        <span className={cell.count > 0 ? "text-bg font-bold" : "text-muted"}>
+                          {cell.day}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Legend */}
+        <div className="flex items-center justify-between mt-3">
+          <div className="flex items-center gap-2 text-[9px] text-muted">
+            <span className="w-[11px] h-[11px] rounded-[2px] inline-block" style={{ backgroundColor: AMBER_SCALE[0] }} />
+            <span>0</span>
+            <span className="w-[11px] h-[11px] rounded-[2px] inline-block" style={{ backgroundColor: AMBER_SCALE[1] }} />
+            <span>1</span>
+            <span className="w-[11px] h-[11px] rounded-[2px] inline-block" style={{ backgroundColor: AMBER_SCALE[2] }} />
+            <span>2–3</span>
+            <span className="w-[11px] h-[11px] rounded-[2px] inline-block" style={{ backgroundColor: AMBER_SCALE[3] }} />
+            <span>4–6</span>
+            <span className="w-[11px] h-[11px] rounded-[2px] inline-block" style={{ backgroundColor: AMBER_SCALE[4] }} />
+            <span>7+</span>
+          </div>
+          <span className="text-[9px] text-muted">Mon → Sun</span>
         </div>
       </div>
 

@@ -6,6 +6,29 @@ _nothing_
 ## Queue
 - [ ] **Notifications** — browser push for spaced repetition reminders
 
+## Backlog
+
+**UX**
+- [ ] **Bulk akcije** — označi više captures, obriši/promeni projekt odjednom
+
+**AI**
+- [ ] **Semantic RAG u chat tabu** — embedding-based search umesto keyword matching
+- [ ] **Live AI sugestije** — predlaže tip/projekt dok kucaš, pre save
+- [ ] **Summarize capture** — dugme na kartici, AI sažetak jednog capture-a
+
+**Grow tab**
+- [ ] **Ciljevi** — postavi target captures po nedelji, prati progress
+- [ ] **Streak freeze** — jedna propuštena noć ne pokvari streak
+
+**Tehničko**
+- [ ] **Paginacija** — trenutno limit 50 u listi, dodati load more
+- [ ] **Full-text search u Supabase** — umesto klijentskog filtera, brže na velikim bazama
+- [ ] **Rate limiting** — zaštita API ruta od prekomerne upotrebe
+
+**Integracije**
+- [ ] **Import** — uvoz iz Notion, Obsidian, Readwise
+- [ ] **Webhook/Zapier** — okini automatizaciju kada se sačuva novi capture
+
 ## Done
 - [x] Favorites / star
 - [x] Export (Markdown + JSON)
