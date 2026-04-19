@@ -33,11 +33,13 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const { starred } = await request.json();
+  const body = await request.json();
+  const allowed = ["starred", "last_reviewed_at"];
+  const patch = Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)));
 
   const { data, error } = await supabase
     .from("captures")
-    .update({ starred })
+    .update(patch)
     .eq("id", id)
     .eq("user_id", user.id)
     .select()

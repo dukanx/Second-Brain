@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import type { Capture } from "./BrainClient";
 
 const AMBER_SCALE = ["#0d1117", "#f59e0b22", "#f59e0b55", "#f59e0b99", "#f59e0b"];
@@ -73,6 +73,34 @@ export default function GrowthTab({
   setCaptures: React.Dispatch<React.SetStateAction<Capture[]>>;
 }) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
+
+  type WeeklySummary = {
+    highlights: string[];
+    themes: string[];
+    insight: string;
+    momentum: "high" | "medium" | "low";
+  };
+  const [weekly, setWeekly] = useState<WeeklySummary | null>(null);
+  const [weeklyAt, setWeeklyAt] = useState<string | null>(null);
+  const [weeklyGenerating, setWeeklyGenerating] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/summary/weekly")
+      .then((r) => r.json())
+      .then((d) => { if (d.summary) { setWeekly(d.summary); setWeeklyAt(d.generatedAt); } });
+  }, []);
+
+  async function generateWeekly() {
+    setWeeklyGenerating(true);
+    try {
+      const res = await fetch("/api/summary/weekly", { method: "POST" });
+      const d = await res.json();
+      if (d.summary) { setWeekly(d.summary); setWeeklyAt(d.generatedAt); }
+    } finally {
+      setWeeklyGenerating(false);
+    }
+  }
 
   const tasks = useMemo(
     () => captures.filter((c) => c.type === "Task").sort(
@@ -98,6 +126,31 @@ export default function GrowthTab({
   const todayKey = dateKey(new Date());
   const todayCount = captures.filter((c) => c.created_at.slice(0, 10) === todayKey).length;
 
+  const reviewQueue = useMemo(() => {
+    const cutoff = Date.now() - 7 * 86400_000;
+    return captures
+      .filter((c) => ["Learning", "Idea"].includes(c.type))
+      .filter((c) => !reviewedIds.has(c.id))
+      .filter((c) => !c.last_reviewed_at || new Date(c.last_reviewed_at).getTime() < cutoff)
+      .sort((a, b) => {
+        const at = a.last_reviewed_at ? new Date(a.last_reviewed_at).getTime() : 0;
+        const bt = b.last_reviewed_at ? new Date(b.last_reviewed_at).getTime() : 0;
+        return at - bt;
+      })
+      .slice(0, 5);
+  }, [captures, reviewedIds]);
+
+  async function markReviewed(id: string) {
+    const now = new Date().toISOString();
+    setReviewedIds((prev) => new Set([...prev, id]));
+    setCaptures((prev) => prev.map((c) => c.id === id ? { ...c, last_reviewed_at: now } : c));
+    fetch(`/api/capture/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ last_reviewed_at: now }),
+    });
+  }
+
   async function completeTask(id: string) {
     setDeletingId(id);
     try {
@@ -110,6 +163,66 @@ export default function GrowthTab({
 
   return (
     <div className="space-y-5 animate-fade-in">
+      {/* Weekly summary */}
+      <div className="bg-surface terminal-border rounded-lg overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <p className="text-xs text-muted">// this week</p>
+          <div className="flex items-center gap-3">
+            {weeklyAt && (
+              <span className="text-[10px] text-muted">
+                {new Date(weeklyAt).toLocaleDateString("sr", { day: "2-digit", month: "2-digit" })}
+              </span>
+            )}
+            <button
+              onClick={generateWeekly}
+              disabled={weeklyGenerating}
+              className="text-xs text-muted hover:text-purple border border-border hover:border-purple rounded px-2 py-0.5 transition-colors disabled:opacity-40"
+            >
+              {weeklyGenerating ? "generating..." : weekly ? "regenerate" : "generate"}
+            </button>
+          </div>
+        </div>
+
+        {!weekly && !weeklyGenerating && (
+          <p className="text-xs text-muted py-6 text-center">generate your weekly summary</p>
+        )}
+        {weeklyGenerating && (
+          <p className="text-xs text-muted py-6 text-center animate-pulse">analyzing this week...</p>
+        )}
+        {weekly && !weeklyGenerating && (
+          <div className="p-4 space-y-3 animate-fade-in">
+            {/* Momentum + themes */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`text-xs px-2 py-0.5 rounded border ${
+                weekly.momentum === "high"   ? "border-green/40 text-green bg-green/10" :
+                weekly.momentum === "medium" ? "border-amber/40 text-amber bg-amber/10" :
+                                               "border-muted/40 text-muted"
+              }`}>
+                {weekly.momentum} momentum
+              </span>
+              {weekly.themes.map((t) => (
+                <span key={t} className="text-xs px-2 py-0.5 rounded border border-purple/30 text-purple bg-purple/10">
+                  {t}
+                </span>
+              ))}
+            </div>
+            {/* Highlights */}
+            <ul className="space-y-1">
+              {weekly.highlights.map((h) => (
+                <li key={h} className="text-xs text-muted flex gap-2">
+                  <span className="text-amber shrink-0">→</span>
+                  <span>{h}</span>
+                </li>
+              ))}
+            </ul>
+            {/* Insight */}
+            <p className="text-xs text-text/70 border-l-2 border-purple/40 pl-3 leading-relaxed">
+              {weekly.insight}
+            </p>
+          </div>
+        )}
+      </div>
+
       {/* Stats row */}
       <div className="grid grid-cols-4 gap-3">
         {[
@@ -160,6 +273,47 @@ export default function GrowthTab({
           ))}
           <span className="text-[9px] text-muted">more</span>
         </div>
+      </div>
+
+      {/* Spaced repetition */}
+      <div className="bg-surface terminal-border rounded-lg overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <p className="text-xs text-muted">// review queue</p>
+          <span className="text-xs text-purple">{reviewQueue.length} due</span>
+        </div>
+        {reviewQueue.length === 0 ? (
+          <p className="text-xs text-muted py-6 text-center">all caught up — check back tomorrow</p>
+        ) : (
+          <div className="divide-y divide-border">
+            {reviewQueue.map((c) => {
+              const daysSince = c.last_reviewed_at
+                ? Math.floor((Date.now() - new Date(c.last_reviewed_at).getTime()) / 86400_000)
+                : null;
+              return (
+                <div key={c.id} className="px-4 py-3 flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-[10px] shrink-0 ${c.type === "Learning" ? "text-purple" : "text-amber"}`}>
+                        [{c.type}]
+                      </span>
+                      <span className="text-sm text-text truncate">{c.title}</span>
+                    </div>
+                    <p className="text-xs text-muted leading-relaxed line-clamp-2">{c.text}</p>
+                    <p className="text-[10px] text-muted mt-1">
+                      {daysSince === null ? "never reviewed" : `reviewed ${daysSince}d ago`}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => markReviewed(c.id)}
+                    className="shrink-0 text-xs px-3 py-1 border border-purple/40 text-purple rounded hover:bg-purple/10 transition-colors"
+                  >
+                    done ✓
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Task manager */}

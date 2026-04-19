@@ -21,6 +21,7 @@ export type Capture = {
   related_ids: string[];
   created_at: string;
   starred: boolean;
+  last_reviewed_at: string | null;
 };
 
 type Tab = "capture" | "search" | "graph" | "digest" | "grow";
