@@ -4,13 +4,14 @@
 _nothing_
 
 ## Queue
-- [ ] **Favorites / star** — add `starred` boolean column to captures, star button on cards, filter pill
-- [ ] **Export** — download all captures as Markdown or JSON
-- [ ] **Weekly email digest** — Resend + Vercel cron, Monday summary email
-- [ ] **Spaced repetition** — surface old Learning/Idea captures in Grow tab daily
-- [ ] **AI chat** — conversational interface over your captures
+- [ ] **Notifications** — browser push for spaced repetition reminders
 
 ## Done
+- [x] Favorites / star
+- [x] Export (Markdown + JSON)
+- [x] Spaced repetition
+- [x] Weekly summary (in-app, Grow tab)
+- [x] AI chat (RAG, ~$0.01/poruka)
 - [x] Google OAuth login
 - [x] AI capture (type/project/title auto-categorization)
 - [x] URL enrichment (og:title + meta description)
