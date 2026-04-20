@@ -96,11 +96,13 @@ export default function BrainClient({
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
     navigator.serviceWorker.register("/sw.js").catch(() => {});
-    setNotifStatus(Notification.permission === "granted" ? "granted" : Notification.permission === "denied" ? "denied" : "unknown");
+    if (typeof Notification !== "undefined") {
+      setNotifStatus(Notification.permission === "granted" ? "granted" : Notification.permission === "denied" ? "denied" : "unknown");
+    }
   }, []);
 
   async function enableNotifications() {
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || typeof Notification === "undefined") return;
     const permission = await Notification.requestPermission();
     if (permission !== "granted") { setNotifStatus("denied"); return; }
     setNotifStatus("granted");
