@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import type { Capture } from "./BrainClient";
 
 const AMBER_SCALE = ["#0d1117", "#f59e0b22", "#f59e0b55", "#f59e0b99", "#f59e0b"];
@@ -100,6 +100,8 @@ export default function GrowthTab({
 }) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
+  const [expandedReviewId, setExpandedReviewId] = useState<string | null>(null);
+  const heatmapScrollRef = useRef<HTMLDivElement>(null);
 
   type WeeklySummary = {
     highlights: string[];
@@ -164,6 +166,12 @@ export default function GrowthTab({
 
   const todayKey = dateKey(new Date());
   const todayCount = captures.filter((c) => c.created_at.slice(0, 10) === todayKey).length;
+
+  useEffect(() => {
+    if (heatmapView === "year" && heatmapScrollRef.current) {
+      heatmapScrollRef.current.scrollLeft = heatmapScrollRef.current.scrollWidth;
+    }
+  }, [heatmapView]);
 
   const reviewQueue = useMemo(() => {
     const cutoff = Date.now() - 7 * 86400_000;
@@ -308,7 +316,7 @@ export default function GrowthTab({
         </div>
         {heatmapView === "year" && (
           <>
-            <div className="flex gap-1 overflow-x-auto pb-1 no-scrollbar">
+            <div ref={heatmapScrollRef} className="flex gap-1 overflow-x-auto pb-1 no-scrollbar">
               <div className="flex flex-col shrink-0 mr-1 mt-4">
                 {DAY_LABELS.map((d, i) => (
                   <span key={i} className="text-[9px] text-muted leading-none mb-[3px] h-[11px] flex items-center">
@@ -415,26 +423,44 @@ export default function GrowthTab({
               const daysSince = c.last_reviewed_at
                 ? Math.floor((Date.now() - new Date(c.last_reviewed_at).getTime()) / 86400_000)
                 : null;
+              const expanded = expandedReviewId === c.id;
               return (
-                <div key={c.id} className="px-4 py-3 flex items-start gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className={`text-[10px] shrink-0 ${c.type === "Learning" ? "text-purple" : "text-amber"}`}>
-                        [{c.type}]
-                      </span>
-                      <span className="text-sm text-text truncate">{c.title}</span>
-                    </div>
-                    <p className="text-xs text-muted leading-relaxed line-clamp-2">{c.text}</p>
-                    <p className="text-[10px] text-muted mt-1">
-                      {daysSince === null ? "never reviewed" : `reviewed ${daysSince}d ago`}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => markReviewed(c.id)}
-                    className="shrink-0 text-xs px-3 py-1 border border-purple/40 text-purple rounded hover:bg-purple/10 transition-colors"
+                <div key={c.id} className="border-b border-border last:border-0">
+                  <div
+                    className="px-4 py-3 flex items-start gap-3 cursor-pointer active:bg-border transition-colors"
+                    onClick={() => setExpandedReviewId(expanded ? null : c.id)}
                   >
-                    done ✓
-                  </button>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`text-[10px] shrink-0 ${c.type === "Learning" ? "text-purple" : "text-amber"}`}>
+                          [{c.type}]
+                        </span>
+                        <span className="text-sm text-text truncate">{c.title}</span>
+                      </div>
+                      {!expanded && (
+                        <p className="text-xs text-muted leading-relaxed line-clamp-2">{c.text}</p>
+                      )}
+                      <p className="text-[10px] text-muted mt-1">
+                        {daysSince === null ? "never reviewed" : `reviewed ${daysSince}d ago`}
+                        <span className="ml-2">{expanded ? "▴" : "▾"}</span>
+                      </p>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); markReviewed(c.id); }}
+                      className="shrink-0 text-xs px-3 py-1 border border-purple/40 text-purple rounded hover:bg-purple/10 transition-colors mt-0.5"
+                    >
+                      done ✓
+                    </button>
+                  </div>
+                  {expanded && (
+                    <div className="px-4 pb-4 animate-fade-in">
+                      <p className="text-xs text-muted leading-relaxed whitespace-pre-wrap">{c.text}</p>
+                      <div className="flex gap-3 mt-2 text-[10px] text-muted">
+                        <span>{c.project}</span>
+                        <span>{new Date(c.created_at).toLocaleDateString("sr", { day: "2-digit", month: "2-digit", year: "2-digit" })}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
