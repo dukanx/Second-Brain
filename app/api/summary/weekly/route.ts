@@ -17,16 +17,15 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const weekStart = getWeekStart();
   const { data } = await supabase
     .from("summaries")
-    .select("content, created_at")
+    .select("content, created_at, week_start")
     .eq("user_id", user.id)
-    .eq("week_start", weekStart)
-    .single();
+    .order("week_start", { ascending: false })
+    .limit(8);
 
-  if (!data) return NextResponse.json({ summary: null });
-  return NextResponse.json({ summary: data.content, generatedAt: data.created_at });
+  if (!data || data.length === 0) return NextResponse.json({ summaries: [] });
+  return NextResponse.json({ summaries: data });
 }
 
 export async function POST() {

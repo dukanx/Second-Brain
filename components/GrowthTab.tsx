@@ -109,14 +109,16 @@ export default function GrowthTab({
     insight: string;
     momentum: "high" | "medium" | "low";
   };
-  const [weekly, setWeekly] = useState<WeeklySummary | null>(null);
-  const [weeklyAt, setWeeklyAt] = useState<string | null>(null);
+  type WeeklyRecord = { content: WeeklySummary; created_at: string; week_start: string };
+  const [weeklies, setWeeklies] = useState<WeeklyRecord[]>([]);
   const [weeklyGenerating, setWeeklyGenerating] = useState(false);
+  const [selectedWeek, setSelectedWeek] = useState(0);
+  const [weeklyHistoryOpen, setWeeklyHistoryOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/summary/weekly")
       .then((r) => r.json())
-      .then((d) => { if (d.summary) { setWeekly(d.summary); setWeeklyAt(d.generatedAt); } });
+      .then((d) => { if (d.summaries?.length) setWeeklies(d.summaries); });
   }, []);
 
   async function generateWeekly() {
@@ -124,7 +126,11 @@ export default function GrowthTab({
     try {
       const res = await fetch("/api/summary/weekly", { method: "POST" });
       const d = await res.json();
-      if (d.summary) { setWeekly(d.summary); setWeeklyAt(d.generatedAt); }
+      if (d.summary) {
+        const rec: WeeklyRecord = { content: d.summary, created_at: d.generatedAt, week_start: d.generatedAt.slice(0, 10) };
+        setWeeklies((prev) => [rec, ...prev.filter((w) => w.week_start !== rec.week_start)]);
+        setSelectedWeek(0);
+      }
     } finally {
       setWeeklyGenerating(false);
     }
@@ -211,64 +217,87 @@ export default function GrowthTab({
   return (
     <div className="space-y-5 animate-fade-in">
       {/* Weekly summary */}
-      <div className="bg-surface terminal-border rounded-lg overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <p className="text-xs text-muted">// this week</p>
-          <div className="flex items-center gap-3">
-            {weeklyAt && (
-              <span className="text-[10px] text-muted">
-                {new Date(weeklyAt).toLocaleDateString("sr", { day: "2-digit", month: "2-digit" })}
-              </span>
-            )}
-            <button
-              onClick={generateWeekly}
-              disabled={weeklyGenerating}
-              className="text-xs text-muted hover:text-purple border border-border hover:border-purple rounded px-2 py-0.5 transition-colors disabled:opacity-40"
-            >
-              {weeklyGenerating ? "generating..." : weekly ? "regenerate" : "generate"}
-            </button>
-          </div>
-        </div>
-
-        {!weekly && !weeklyGenerating && (
-          <p className="text-xs text-muted py-6 text-center">generate your weekly summary</p>
-        )}
-        {weeklyGenerating && (
-          <p className="text-xs text-muted py-6 text-center animate-pulse">analyzing this week...</p>
-        )}
-        {weekly && !weeklyGenerating && (
-          <div className="p-4 space-y-3 animate-fade-in">
-            {/* Momentum + themes */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className={`text-xs px-2 py-0.5 rounded border ${
-                weekly.momentum === "high"   ? "border-green/40 text-green bg-green/10" :
-                weekly.momentum === "medium" ? "border-amber/40 text-amber bg-amber/10" :
-                                               "border-muted/40 text-muted"
-              }`}>
-                {weekly.momentum} momentum
-              </span>
-              {weekly.themes.map((t) => (
-                <span key={t} className="text-xs px-2 py-0.5 rounded border border-purple/30 text-purple bg-purple/10">
-                  {t}
-                </span>
-              ))}
+      {(() => {
+        const shown = weeklies[selectedWeek];
+        return (
+          <div className="bg-surface terminal-border rounded-lg overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <p className="text-xs text-muted">// weekly summary</p>
+              <div className="flex items-center gap-2">
+                {weeklies.length > 1 && (
+                  <button
+                    onClick={() => setWeeklyHistoryOpen((o) => !o)}
+                    className="text-[10px] text-muted hover:text-text border border-border rounded px-2 py-0.5 transition-colors"
+                  >
+                    history ({weeklies.length}) {weeklyHistoryOpen ? "▴" : "▾"}
+                  </button>
+                )}
+                <button
+                  onClick={generateWeekly}
+                  disabled={weeklyGenerating}
+                  className="text-xs text-muted hover:text-purple border border-border hover:border-purple rounded px-2 py-0.5 transition-colors disabled:opacity-40"
+                >
+                  {weeklyGenerating ? "generating..." : shown ? "regenerate" : "generate"}
+                </button>
+              </div>
             </div>
-            {/* Highlights */}
-            <ul className="space-y-1">
-              {weekly.highlights.map((h) => (
-                <li key={h} className="text-xs text-muted flex gap-2">
-                  <span className="text-amber shrink-0">→</span>
-                  <span>{h}</span>
-                </li>
-              ))}
-            </ul>
-            {/* Insight */}
-            <p className="text-xs text-text/70 border-l-2 border-purple/40 pl-3 leading-relaxed">
-              {weekly.insight}
-            </p>
+
+            {weeklyHistoryOpen && weeklies.length > 1 && (
+              <div className="border-b border-border divide-y divide-border">
+                {weeklies.map((w, i) => (
+                  <button
+                    key={w.week_start}
+                    onClick={() => { setSelectedWeek(i); setWeeklyHistoryOpen(false); }}
+                    className={`w-full text-left px-4 py-2 text-xs flex items-center justify-between transition-colors ${
+                      selectedWeek === i ? "text-purple" : "text-muted hover:text-text"
+                    }`}
+                  >
+                    <span>week of {new Date(w.week_start + "T12:00:00").toLocaleDateString("en", { day: "2-digit", month: "short" })}</span>
+                    <span>{w.content.momentum} momentum</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {!shown && !weeklyGenerating && (
+              <p className="text-xs text-muted py-6 text-center">generate your weekly summary</p>
+            )}
+            {weeklyGenerating && (
+              <p className="text-xs text-muted py-6 text-center animate-pulse">analyzing this week...</p>
+            )}
+            {shown && !weeklyGenerating && (
+              <div className="p-4 space-y-3 animate-fade-in">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-xs px-2 py-0.5 rounded border ${
+                    shown.content.momentum === "high"   ? "border-green/40 text-green bg-green/10" :
+                    shown.content.momentum === "medium" ? "border-amber/40 text-amber bg-amber/10" :
+                                                          "border-muted/40 text-muted"
+                  }`}>
+                    {shown.content.momentum} momentum
+                  </span>
+                  {shown.content.themes.map((t) => (
+                    <span key={t} className="text-xs px-2 py-0.5 rounded border border-purple/30 text-purple bg-purple/10">{t}</span>
+                  ))}
+                </div>
+                <ul className="space-y-1">
+                  {shown.content.highlights.map((h) => (
+                    <li key={h} className="text-xs text-muted flex gap-2">
+                      <span className="text-amber shrink-0">→</span>
+                      <span>{h}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-text/70 border-l-2 border-purple/40 pl-3 leading-relaxed">
+                  {shown.content.insight}
+                </p>
+                <p className="text-[10px] text-muted text-right">
+                  {new Date(shown.created_at).toLocaleDateString("sr", { day: "2-digit", month: "2-digit", year: "2-digit" })}
+                </p>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        );
+      })()}
 
       {/* Stats row */}
       <div className="grid grid-cols-4 gap-3">
@@ -445,19 +474,32 @@ export default function GrowthTab({
                         <span className="ml-2">{expanded ? "▴" : "▾"}</span>
                       </p>
                     </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); markReviewed(c.id); }}
-                      className="shrink-0 text-xs px-3 py-1 border border-purple/40 text-purple rounded hover:bg-purple/10 transition-colors mt-0.5"
-                    >
-                      done ✓
-                    </button>
+                    {!expanded && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); markReviewed(c.id); }}
+                        className="shrink-0 text-xs px-3 py-1 border border-purple/40 text-purple rounded hover:bg-purple/10 transition-colors mt-0.5"
+                      >
+                        done ✓
+                      </button>
+                    )}
                   </div>
                   {expanded && (
-                    <div className="px-4 pb-4 animate-fade-in">
-                      <p className="text-xs text-muted leading-relaxed whitespace-pre-wrap">{c.text}</p>
-                      <div className="flex gap-3 mt-2 text-[10px] text-muted">
-                        <span>{c.project}</span>
-                        <span>{new Date(c.created_at).toLocaleDateString("sr", { day: "2-digit", month: "2-digit", year: "2-digit" })}</span>
+                    <div className="animate-fade-in">
+                      <div className="px-5 py-4 bg-bg/40">
+                        <p className="text-sm text-text leading-7 whitespace-pre-wrap">{c.text}</p>
+                      </div>
+                      <div className="flex items-center justify-between px-4 py-2 border-t border-border">
+                        <div className="flex gap-3 text-[10px] text-muted">
+                          <span className={c.type === "Learning" ? "text-purple" : "text-amber"}>{c.type}</span>
+                          <span>{c.project}</span>
+                          <span>{new Date(c.created_at).toLocaleDateString("sr", { day: "2-digit", month: "2-digit", year: "2-digit" })}</span>
+                        </div>
+                        <button
+                          onClick={() => markReviewed(c.id)}
+                          className="text-xs px-3 py-1 border border-purple/40 text-purple rounded hover:bg-purple/10 transition-colors"
+                        >
+                          done ✓
+                        </button>
                       </div>
                     </div>
                   )}
@@ -504,37 +546,51 @@ function TaskRow({
   onComplete: () => void;
 }) {
   const [confirm, setConfirm] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const age = Math.floor((Date.now() - new Date(task.created_at).getTime()) / 86400_000);
 
   return (
-    <div className="px-4 py-3 flex items-start gap-3">
-      <button
-        onClick={() => (confirm ? onComplete() : setConfirm(true))}
-        disabled={completing}
-        className={`mt-0.5 w-4 h-4 shrink-0 rounded border transition-colors ${
-          confirm
-            ? "border-green bg-green/20 text-green"
-            : "border-border hover:border-green"
-        } flex items-center justify-center text-xs`}
+    <div className={`border-b border-border last:border-0 transition-opacity duration-500 ${completing ? "opacity-40" : "opacity-100"}`}>
+      <div
+        className="px-4 py-3 flex items-start gap-3 cursor-pointer active:bg-border transition-colors"
+        onClick={() => !confirm && setExpanded((e) => !e)}
       >
-        {confirm && "✓"}
-      </button>
-      <div className="flex-1 min-w-0">
-        <p className={`text-sm text-text leading-snug ${confirm ? "line-through text-muted" : ""}`}>
-          {task.title}
-        </p>
-        {task.text !== task.title && (
-          <p className="text-xs text-muted mt-0.5 truncate">{task.text.slice(0, 80)}</p>
-        )}
-        <div className="flex gap-3 mt-1 text-xs text-muted">
-          <span>{task.project}</span>
-          <span>{age === 0 ? "today" : age === 1 ? "yesterday" : `${age}d ago`}</span>
-        </div>
-      </div>
-      {confirm && (
-        <button onClick={() => setConfirm(false)} className="text-xs text-muted hover:text-text shrink-0">
-          cancel
+        <button
+          onClick={(e) => { e.stopPropagation(); confirm ? onComplete() : setConfirm(true); }}
+          disabled={completing}
+          className={`mt-0.5 w-4 h-4 shrink-0 rounded border transition-colors ${
+            confirm ? "border-green bg-green/20 text-green" : "border-border hover:border-green"
+          } flex items-center justify-center text-xs`}
+        >
+          {confirm && "✓"}
         </button>
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm leading-snug ${confirm ? "line-through text-muted" : "text-text"}`}>
+            {task.title}
+          </p>
+          {!expanded && task.text !== task.title && (
+            <p className="text-xs text-muted mt-0.5 truncate">{task.text.slice(0, 80)}</p>
+          )}
+          <div className="flex gap-3 mt-1 text-[10px] text-muted">
+            <span>{task.project}</span>
+            <span>{age === 0 ? "today" : age === 1 ? "yesterday" : `${age}d ago`}</span>
+            <span>{expanded ? "▴" : "▾"}</span>
+          </div>
+        </div>
+        {confirm && (
+          <button
+            onClick={(e) => { e.stopPropagation(); setConfirm(false); }}
+            className="text-xs text-muted hover:text-text shrink-0"
+          >
+            cancel
+          </button>
+        )}
+      </div>
+      {expanded && (
+        <div className="px-5 pb-4 bg-bg/40 animate-fade-in">
+          <p className="text-sm text-text leading-7 whitespace-pre-wrap">{task.text}</p>
+          <p className="text-[10px] text-muted mt-2">{task.project}</p>
+        </div>
       )}
     </div>
   );

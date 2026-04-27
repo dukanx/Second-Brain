@@ -9,50 +9,111 @@ type DigestData = {
   forgottenIdeas: { id: string; title: string }[];
   patterns: string;
   suggestion: string;
-  generatedAt: string;
   total: number;
 };
 
-const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h
+type DigestRecord = {
+  id: string;
+  content: DigestData;
+  created_at: string;
+};
 
-function cacheKey(userId: string) {
-  return `sb_digest_${userId}`;
+const TYPE_COLOR: Record<string, string> = {
+  Idea: "#fbbf24", Link: "#38bdf8", Task: "#4ade80", Learning: "#c084fc", Note: "#94a3b8",
+};
+const PROJECT_COLOR: Record<string, string> = {
+  "Village Booker": "#f59e0b", "Glumac Plus": "#a78bfa",
+  FON: "#60a5fa", Personal: "#34d399", Other: "#6b7280",
+};
+
+function timeAgo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const h = Math.floor(diff / 3600000);
+  if (h < 1) return "just now";
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
 }
 
-function loadCache(userId: string): DigestData | null {
-  try {
-    const raw = localStorage.getItem(cacheKey(userId));
-    if (!raw) return null;
-    const { data, ts } = JSON.parse(raw);
-    if (Date.now() - ts > CACHE_TTL_MS) return null;
-    return data;
-  } catch {
-    return null;
-  }
-}
+function DigestView({ digest, generatedAt }: { digest: DigestData; generatedAt: string }) {
+  return (
+    <div className="space-y-4 animate-fade-in">
+      <div className="bg-surface terminal-border rounded-lg p-4">
+        <p className="text-xs text-muted mb-3">// recurring themes</p>
+        <div className="flex flex-wrap gap-2">
+          {digest.themes.map((theme, i) => (
+            <span key={i} className="text-xs px-3 py-1 rounded-full border border-amber/30 text-amber bg-amber/5">
+              {theme}
+            </span>
+          ))}
+        </div>
+      </div>
 
-function saveCache(userId: string, data: DigestData) {
-  try {
-    localStorage.setItem(cacheKey(userId), JSON.stringify({ data, ts: Date.now() }));
-  } catch {}
+      <div className="bg-surface terminal-border rounded-lg p-4">
+        <p className="text-xs text-muted mb-2">// patterns noticed</p>
+        <p className="text-sm text-text leading-relaxed">{digest.patterns}</p>
+      </div>
+
+      {digest.pendingTasks?.length > 0 && (
+        <div className="bg-surface terminal-border rounded-lg p-4">
+          <p className="text-xs text-muted mb-3">
+            // pending tasks <span className="text-green">{digest.pendingTasks.length}</span>
+          </p>
+          <div className="space-y-2">
+            {digest.pendingTasks.map((t) => (
+              <div key={t.id} className="flex items-center gap-2">
+                <span className="text-green text-xs shrink-0">□</span>
+                <span className="text-xs text-text">{t.title}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {digest.forgottenIdeas?.length > 0 && (
+        <div className="bg-surface terminal-border rounded-lg p-4">
+          <p className="text-xs text-muted mb-3">
+            // worth revisiting <span className="text-purple">{digest.forgottenIdeas.length}</span>
+          </p>
+          <div className="space-y-2">
+            {digest.forgottenIdeas.map((idea) => (
+              <div key={idea.id} className="flex items-center gap-2">
+                <span className="text-purple text-xs shrink-0">◈</span>
+                <span className="text-xs text-text">{idea.title}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="bg-surface border border-blue/20 rounded-lg p-4">
+        <p className="text-xs text-blue mb-2">// suggested next action</p>
+        <p className="text-sm text-text leading-relaxed">{digest.suggestion}</p>
+      </div>
+
+      <p className="text-xs text-muted text-center">generated {timeAgo(generatedAt)}</p>
+    </div>
+  );
 }
 
 export default function DigestTab({
   captures,
-  userId,
 }: {
   captures: Capture[];
   userId: string;
 }) {
-  const [digest, setDigest] = useState<DigestData | null>(null);
+  const [records, setRecords] = useState<DigestRecord[]>([]);
   const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(true);
   const [error, setError] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Load from cache on mount
   useEffect(() => {
-    const cached = loadCache(userId);
-    if (cached) setDigest(cached);
-  }, [userId]);
+    fetch("/api/digest")
+      .then((r) => r.json())
+      .then((d) => { if (d.digests) setRecords(d.digests); })
+      .finally(() => setFetching(false));
+  }, []);
 
   async function generate() {
     setLoading(true);
@@ -61,8 +122,13 @@ export default function DigestTab({
       const res = await fetch("/api/digest", { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed");
-      setDigest(data);
-      saveCache(userId, data);
+      const newRecord: DigestRecord = {
+        id: crypto.randomUUID(),
+        content: data,
+        created_at: data.generatedAt,
+      };
+      setRecords((prev) => [newRecord, ...prev]);
+      setSelectedId(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
     } finally {
@@ -70,41 +136,25 @@ export default function DigestTab({
     }
   }
 
-  // Stats computed client-side
   const byType = captures.reduce<Record<string, number>>((acc, c) => {
-    acc[c.type] = (acc[c.type] ?? 0) + 1;
-    return acc;
+    acc[c.type] = (acc[c.type] ?? 0) + 1; return acc;
   }, {});
   const byProject = captures.reduce<Record<string, number>>((acc, c) => {
-    acc[c.project] = (acc[c.project] ?? 0) + 1;
-    return acc;
+    acc[c.project] = (acc[c.project] ?? 0) + 1; return acc;
   }, {});
 
-  const TYPE_COLOR: Record<string, string> = {
-    Idea: "#fbbf24", Link: "#38bdf8", Task: "#4ade80", Learning: "#c084fc", Note: "#94a3b8",
-  };
-  const PROJECT_COLOR: Record<string, string> = {
-    "Village Booker": "#f59e0b", "Glumac Plus": "#a78bfa",
-    FON: "#60a5fa", Personal: "#34d399", Other: "#6b7280",
-  };
-
-  const timeAgo = (iso: string) => {
-    const diff = Date.now() - new Date(iso).getTime();
-    const h = Math.floor(diff / 3600000);
-    if (h < 1) return "just now";
-    if (h < 24) return `${h}h ago`;
-    return `${Math.floor(h / 24)}d ago`;
-  };
+  const latest = records[0];
+  const shown = selectedId ? records.find((r) => r.id === selectedId) : latest;
 
   return (
     <div className="space-y-5 animate-fade-in">
-      {/* Header + stats */}
+      {/* Header */}
       <div className="bg-surface terminal-border rounded-lg p-4">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-sm text-text font-bold">daily digest</h2>
             <p className="text-xs text-muted mt-0.5">
-              {captures.length} captures · AI synthesis of your knowledge base
+              {captures.length} captures · AI synthesis
             </p>
           </div>
           <button
@@ -112,7 +162,7 @@ export default function DigestTab({
             disabled={loading || captures.length === 0}
             className="text-xs px-4 py-2 bg-amber text-bg rounded font-bold hover:bg-yellow-400 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {loading ? "analyzing..." : digest ? "regenerate()" : "generate()"}
+            {loading ? "analyzing..." : latest ? "regenerate()" : "generate()"}
           </button>
         </div>
 
@@ -121,48 +171,32 @@ export default function DigestTab({
           <div>
             <p className="text-xs text-muted mb-2">by type</p>
             <div className="space-y-1">
-              {Object.entries(byType)
-                .sort(([, a], [, b]) => b - a)
-                .map(([type, count]) => (
-                  <div key={type} className="flex items-center gap-2">
-                    <div className="flex-1 h-1.5 bg-border rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${(count / captures.length) * 100}%`,
-                          backgroundColor: TYPE_COLOR[type] ?? "#94a3b8",
-                        }}
-                      />
-                    </div>
-                    <span className="text-xs shrink-0" style={{ color: TYPE_COLOR[type] ?? "#94a3b8" }}>
-                      {type} <span className="text-muted">{count}</span>
-                    </span>
+              {Object.entries(byType).sort(([, a], [, b]) => b - a).map(([type, count]) => (
+                <div key={type} className="flex items-center gap-2">
+                  <div className="flex-1 h-1.5 bg-border rounded-full overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${(count / captures.length) * 100}%`, backgroundColor: TYPE_COLOR[type] ?? "#94a3b8" }} />
                   </div>
-                ))}
+                  <span className="text-xs shrink-0" style={{ color: TYPE_COLOR[type] ?? "#94a3b8" }}>
+                    {type} <span className="text-muted">{count}</span>
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
           <div>
             <p className="text-xs text-muted mb-2">by project</p>
             <div className="space-y-1">
-              {Object.entries(byProject)
-                .sort(([, a], [, b]) => b - a)
-                .map(([proj, count]) => (
-                  <div key={proj} className="flex items-center gap-2">
-                    <div className="flex-1 h-1.5 bg-border rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${(count / captures.length) * 100}%`,
-                          backgroundColor: PROJECT_COLOR[proj] ?? "#6b7280",
-                        }}
-                      />
-                    </div>
-                    <span className="text-xs shrink-0" style={{ color: PROJECT_COLOR[proj] ?? "#6b7280" }}>
-                      {proj === "Village Booker" ? "VB" : proj === "Glumac Plus" ? "GP" : proj}{" "}
-                      <span className="text-muted">{count}</span>
-                    </span>
+              {Object.entries(byProject).sort(([, a], [, b]) => b - a).map(([proj, count]) => (
+                <div key={proj} className="flex items-center gap-2">
+                  <div className="flex-1 h-1.5 bg-border rounded-full overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${(count / captures.length) * 100}%`, backgroundColor: PROJECT_COLOR[proj] ?? "#6b7280" }} />
                   </div>
-                ))}
+                  <span className="text-xs shrink-0" style={{ color: PROJECT_COLOR[proj] ?? "#6b7280" }}>
+                    {proj === "Village Booker" ? "VB" : proj === "Glumac Plus" ? "GP" : proj}{" "}
+                    <span className="text-muted">{count}</span>
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -171,6 +205,36 @@ export default function DigestTab({
       {error && (
         <div className="text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded px-3 py-2">
           error: {error}
+        </div>
+      )}
+
+      {/* History picker */}
+      {records.length > 1 && (
+        <div className="bg-surface terminal-border rounded-lg overflow-hidden">
+          <button
+            onClick={() => setHistoryOpen((o) => !o)}
+            className="w-full flex items-center justify-between px-4 py-3 text-xs text-muted hover:text-text transition-colors"
+          >
+            <span>// history ({records.length} digests)</span>
+            <span>{historyOpen ? "▴" : "▾"}</span>
+          </button>
+          {historyOpen && (
+            <div className="border-t border-border divide-y divide-border">
+              {records.map((r) => (
+                <button
+                  key={r.id}
+                  onClick={() => { setSelectedId(r.id === selectedId ? null : r.id); setHistoryOpen(false); }}
+                  className={`w-full text-left px-4 py-2.5 text-xs transition-colors flex items-center justify-between ${
+                    (selectedId === r.id || (!selectedId && r.id === latest?.id))
+                      ? "text-amber" : "text-muted hover:text-text"
+                  }`}
+                >
+                  <span>{new Date(r.created_at).toLocaleDateString("sr", { day: "2-digit", month: "2-digit", year: "2-digit" })}</span>
+                  <span>{timeAgo(r.created_at)}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -186,80 +250,11 @@ export default function DigestTab({
         </div>
       )}
 
-      {digest && !loading && (
-        <div className="space-y-4 animate-fade-in">
-          {/* Themes */}
-          <div className="bg-surface terminal-border rounded-lg p-4">
-            <p className="text-xs text-muted mb-3">// recurring themes</p>
-            <div className="flex flex-wrap gap-2">
-              {digest.themes.map((theme, i) => (
-                <span
-                  key={i}
-                  className="text-xs px-3 py-1 rounded-full border border-amber/30 text-amber bg-amber/5"
-                >
-                  {theme}
-                </span>
-              ))}
-            </div>
-          </div>
+      {!loading && shown && <DigestView digest={shown.content} generatedAt={shown.created_at} />}
 
-          {/* Patterns */}
-          <div className="bg-surface terminal-border rounded-lg p-4">
-            <p className="text-xs text-muted mb-2">// patterns noticed</p>
-            <p className="text-sm text-text leading-relaxed">{digest.patterns}</p>
-          </div>
-
-          {/* Pending tasks */}
-          {digest.pendingTasks?.length > 0 && (
-            <div className="bg-surface terminal-border rounded-lg p-4">
-              <p className="text-xs text-muted mb-3">
-                // pending tasks <span className="text-green">{digest.pendingTasks.length}</span>
-              </p>
-              <div className="space-y-2">
-                {digest.pendingTasks.map((t) => (
-                  <div key={t.id} className="flex items-center gap-2">
-                    <span className="text-green text-xs shrink-0">□</span>
-                    <span className="text-xs text-text">{t.title}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Forgotten ideas */}
-          {digest.forgottenIdeas?.length > 0 && (
-            <div className="bg-surface terminal-border rounded-lg p-4">
-              <p className="text-xs text-muted mb-3">
-                // worth revisiting <span className="text-purple">{digest.forgottenIdeas.length}</span>
-              </p>
-              <div className="space-y-2">
-                {digest.forgottenIdeas.map((idea) => (
-                  <div key={idea.id} className="flex items-center gap-2">
-                    <span className="text-purple text-xs shrink-0">◈</span>
-                    <span className="text-xs text-text">{idea.title}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Suggestion */}
-          <div className="bg-surface border border-blue/20 rounded-lg p-4">
-            <p className="text-xs text-blue mb-2">// suggested next action</p>
-            <p className="text-sm text-text leading-relaxed">{digest.suggestion}</p>
-          </div>
-
-          <p className="text-xs text-muted text-center">
-            generated {timeAgo(digest.generatedAt)} · cached 6h
-          </p>
-        </div>
-      )}
-
-      {!digest && !loading && (
+      {!loading && !fetching && records.length === 0 && (
         <p className="text-xs text-muted py-8 text-center">
-          {captures.length === 0
-            ? "add some captures first"
-            : "tap generate() to analyze your knowledge base"}
+          {captures.length === 0 ? "add some captures first" : "tap generate() to analyze your knowledge base"}
         </p>
       )}
     </div>

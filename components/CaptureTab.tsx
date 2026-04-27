@@ -449,10 +449,13 @@ function CaptureCard({
 
       {/* Expanded content */}
       {expanded && mode === "view" && (
-        <div className="px-4 pb-4 border-t border-border pt-3 animate-fade-in">
-          <p className="text-xs text-muted leading-relaxed whitespace-pre-wrap mb-3">{capture.text}</p>
-          <div className="flex items-center justify-between">
+        <div className="border-t border-border animate-fade-in">
+          <div className="px-5 py-5 bg-bg/40">
+            <p className="text-sm text-text leading-7 whitespace-pre-wrap">{capture.text}</p>
+          </div>
+          <div className="flex items-center justify-between px-4 py-3 border-t border-border">
             <div className="flex gap-3 text-xs text-muted">
+              <span className={TYPE_COLORS[capture.type] ?? "text-muted"}>{capture.type}</span>
               <span>{capture.project}</span>
               {capture.related_ids?.length > 0 && (
                 <span className="text-purple">{capture.related_ids.length} links</span>
