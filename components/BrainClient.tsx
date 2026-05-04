@@ -93,20 +93,11 @@ export default function BrainClient({
     };
   }, [sync]);
 
-  useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.register("/sw.js").catch(() => {});
-    if (typeof Notification !== "undefined") {
-      setNotifStatus(Notification.permission === "granted" ? "granted" : Notification.permission === "denied" ? "denied" : "unknown");
-    }
-  }, []);
-
-  async function enableNotifications() {
-    if (!("serviceWorker" in navigator) || !("PushManager" in window) || typeof Notification === "undefined") return;
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") { setNotifStatus("denied"); return; }
-    setNotifStatus("granted");
+  async function subscribePush() {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
     const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+    if (existing) return; // already subscribed in this browser
     const raw = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!
       .replace(/-/g, "+").replace(/_/g, "/");
     const binary = atob(raw);
@@ -121,6 +112,27 @@ export default function BrainClient({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ subscription: sub }),
     });
+  }
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+    if (typeof Notification === "undefined") return;
+    const perm = Notification.permission;
+    if (perm === "granted") {
+      setNotifStatus("granted");
+      subscribePush();
+    } else if (perm === "denied") {
+      setNotifStatus("denied");
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function enableNotifications() {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || typeof Notification === "undefined") return;
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") { setNotifStatus("denied"); return; }
+    setNotifStatus("granted");
+    await subscribePush();
   }
 
   useEffect(() => {
