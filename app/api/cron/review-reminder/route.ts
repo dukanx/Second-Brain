@@ -66,7 +66,9 @@ export async function GET(request: Request) {
         await webpush.sendNotification(subscription, JSON.stringify(notif));
         sent++;
       } catch {
-        await supabase.from("push_subscriptions").delete().eq("user_id", user_id);
+        await supabase.from("push_subscriptions").delete()
+          .eq("user_id", user_id)
+          .eq("endpoint", subscription.endpoint);
         break;
       }
     }
