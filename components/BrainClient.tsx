@@ -57,7 +57,7 @@ export default function BrainClient({
   const [captures, setCaptures] = useState<Capture[]>(initialCaptures);
   const [syncing, setSyncing]   = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [notifStatus, setNotifStatus] = useState<"unknown" | "granted" | "denied">("unknown");
+  const [notifStatus, setNotifStatus] = useState<"unknown" | "granted" | "denied" | "subscribed">("unknown");
   const router   = useRouter();
   const supabase = createClient();
 
@@ -96,8 +96,6 @@ export default function BrainClient({
   async function subscribePush() {
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
     const reg = await navigator.serviceWorker.ready;
-    const existing = await reg.pushManager.getSubscription();
-    if (existing) return; // already subscribed in this browser
     const raw = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!
       .replace(/-/g, "+").replace(/_/g, "/");
     const binary = atob(raw);
@@ -107,11 +105,12 @@ export default function BrainClient({
       userVisibleOnly: true,
       applicationServerKey: key,
     });
-    await fetch("/api/push/subscribe", {
+    const res = await fetch("/api/push/subscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ subscription: sub }),
     });
+    if (res.ok) setNotifStatus("subscribed");
   }
 
   useEffect(() => {
@@ -119,19 +118,31 @@ export default function BrainClient({
     navigator.serviceWorker.register("/sw.js").catch(() => {});
     if (typeof Notification === "undefined") return;
     const perm = Notification.permission;
-    if (perm === "granted") {
-      setNotifStatus("granted");
-      subscribePush();
-    } else if (perm === "denied") {
-      setNotifStatus("denied");
-    }
+    if (perm === "denied") { setNotifStatus("denied"); return; }
+    if (perm !== "granted") return;
+    // Permission already granted — check if browser already has a push subscription
+    // If yes, sync it to server (no user gesture needed). If no, show the button.
+    navigator.serviceWorker.ready.then((reg) =>
+      reg.pushManager.getSubscription().then((existing) => {
+        if (existing) {
+          // Sync existing subscription to server in case DB was cleared
+          fetch("/api/push/subscribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ subscription: existing }),
+          }).then((r) => { if (r.ok) setNotifStatus("subscribed"); });
+        } else {
+          // No browser subscription yet — keep button visible so user can tap (iOS requires gesture)
+          setNotifStatus("granted");
+        }
+      })
+    );
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function enableNotifications() {
     if (!("serviceWorker" in navigator) || !("PushManager" in window) || typeof Notification === "undefined") return;
     const permission = await Notification.requestPermission();
     if (permission !== "granted") { setNotifStatus("denied"); return; }
-    setNotifStatus("granted");
     await subscribePush();
   }
 
@@ -182,7 +193,7 @@ export default function BrainClient({
         </div>
 
         <div className="flex items-center gap-3">
-          {notifStatus !== "granted" && notifStatus !== "denied" && (
+          {notifStatus !== "subscribed" && notifStatus !== "denied" && (
             <button
               onClick={enableNotifications}
               className="text-xs text-muted hover:text-amber border border-border rounded px-2 py-1 transition-colors hidden sm:block"
