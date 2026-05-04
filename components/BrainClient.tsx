@@ -98,7 +98,8 @@ export default function BrainClient({
     const reg = await navigator.serviceWorker.ready;
     const raw = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!
       .replace(/-/g, "+").replace(/_/g, "/");
-    const binary = atob(raw);
+    const padded = raw + "=".repeat((4 - raw.length % 4) % 4);
+    const binary = atob(padded);
     const key = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) key[i] = binary.charCodeAt(i);
     const sub = await reg.pushManager.subscribe({
