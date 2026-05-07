@@ -58,6 +58,7 @@ export default function BrainClient({
   const [syncing, setSyncing]   = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [notifStatus, setNotifStatus] = useState<"unknown" | "granted" | "denied" | "subscribed">("unknown");
+  const [reviewId, setReviewId] = useState<string | null>(null);
   const router   = useRouter();
   const supabase = createClient();
 
@@ -146,6 +147,28 @@ export default function BrainClient({
     if (permission !== "granted") { setNotifStatus("denied"); return; }
     await subscribePush();
   }
+
+  useEffect(() => {
+    // App opened from notification (URL param)
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("review");
+    if (id) {
+      setTab("grow");
+      setReviewId(id);
+      window.history.replaceState({}, "", "/brain");
+    }
+    // App already open — notification click sends postMessage
+    if ("serviceWorker" in navigator) {
+      const handler = (e: MessageEvent) => {
+        if (e.data?.type === "open-review" && e.data?.captureId) {
+          setTab("grow");
+          setReviewId(e.data.captureId);
+        }
+      };
+      navigator.serviceWorker.addEventListener("message", handler);
+      return () => navigator.serviceWorker.removeEventListener("message", handler);
+    }
+  }, []);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -239,7 +262,7 @@ export default function BrainClient({
         {tab === "search"  && <SearchTab  captures={captures} />}
         {tab === "graph"   && <GraphTab   captures={captures} onRelatesUpdated={refreshCaptures} />}
         {tab === "digest"  && <DigestTab  captures={captures} userId={user.id} />}
-        {tab === "grow"    && <GrowthTab  captures={captures} setCaptures={setCaptures} />}
+        {tab === "grow"    && <GrowthTab  captures={captures} setCaptures={setCaptures} reviewId={reviewId} />}
         {tab === "chat"    && <ChatTab    captures={captures} />}
       </main>
 
