@@ -85,22 +85,23 @@ export async function GET(request: Request) {
   let sent = 0;
 
   for (const { user_id, subscription } of subs) {
-    const notifications: { title: string; body: string }[] = [];
+    const notifications: { title: string; body: string; captureId?: string }[] = [];
 
     // Review reminder (daily) — fetch one random capture to preview
     const { data: dueCaps, count } = await supabase
       .from("captures")
-      .select("title", { count: "exact" })
+      .select("id, title", { count: "exact" })
       .eq("user_id", user_id)
       .in("type", ["Learning", "Idea"])
       .or(`last_reviewed_at.is.null,last_reviewed_at.lt.${cutoff}`)
       .limit(10);
 
     if (count && dueCaps?.length) {
-      const preview = dueCaps[Math.floor(Math.random() * dueCaps.length)].title;
+      const pick = dueCaps[Math.floor(Math.random() * dueCaps.length)];
       notifications.push({
         title: `Second Brain — ${count} due for review`,
-        body: `"${preview}"`,
+        body: `"${pick.title}"`,
+        captureId: pick.id,
       });
     }
 

@@ -6,19 +6,23 @@ self.addEventListener("push", (event) => {
       icon: "/SBicon.png",
       badge: "/SBicon.png",
       tag: "review-reminder",
-      data: { url: "/brain" },
+      data: { captureId: data.captureId ?? null },
     })
   );
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  const captureId = event.notification.data?.captureId;
+  const url = captureId ? `/brain?review=${captureId}` : "/brain";
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
-      for (const client of list) {
-        if (client.url.includes("/brain") && "focus" in client) return client.focus();
+      const brainClient = list.find((c) => c.url.includes("/brain"));
+      if (brainClient) {
+        if (captureId) brainClient.postMessage({ type: "open-review", captureId });
+        return brainClient.focus();
       }
-      return clients.openWindow("/brain");
+      return clients.openWindow(url);
     })
   );
 });
