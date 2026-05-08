@@ -94,15 +94,13 @@ const DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
 export default function GrowthTab({
   captures,
   setCaptures,
-  reviewId,
 }: {
   captures: Capture[];
   setCaptures: React.Dispatch<React.SetStateAction<Capture[]>>;
-  reviewId?: string | null;
 }) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
-  const [expandedReviewId, setExpandedReviewId] = useState<string | null>(reviewId ?? null);
+  const [expandedReviewId, setExpandedReviewId] = useState<string | null>(null);
   const heatmapScrollRef = useRef<HTMLDivElement>(null);
 
   type WeeklySummary = {

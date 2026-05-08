@@ -191,7 +191,11 @@ export default function CaptureTab({
         <textarea
           ref={textareaRef}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            e.target.style.height = "auto";
+            e.target.style.height = `${e.target.scrollHeight}px`;
+          }}
           onKeyDown={handleKeyDown}
           placeholder="// what's on your mind?"
           className="w-full bg-transparent text-text placeholder-muted text-sm p-4 resize-none focus:outline-none min-h-[120px] sm:min-h-[140px] font-mono leading-relaxed"

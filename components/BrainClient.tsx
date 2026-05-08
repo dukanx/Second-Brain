@@ -153,7 +153,7 @@ export default function BrainClient({
     const params = new URLSearchParams(window.location.search);
     const id = params.get("review");
     if (id) {
-      setTab("grow");
+      setTab("chat");
       setReviewId(id);
       window.history.replaceState({}, "", "/brain");
     }
@@ -161,7 +161,7 @@ export default function BrainClient({
     if ("serviceWorker" in navigator) {
       const handler = (e: MessageEvent) => {
         if (e.data?.type === "open-review" && e.data?.captureId) {
-          setTab("grow");
+          setTab("chat");
           setReviewId(e.data.captureId);
         }
       };
@@ -182,6 +182,16 @@ export default function BrainClient({
   }, []);
 
   const refreshCaptures = useCallback(() => sync(), [sync]);
+
+  async function markReviewed(id: string) {
+    const now = new Date().toISOString();
+    setCaptures((prev) => prev.map((c) => c.id === id ? { ...c, last_reviewed_at: now } : c));
+    fetch(`/api/capture/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ last_reviewed_at: now }),
+    });
+  }
 
   async function signOut() {
     await supabase.auth.signOut();
@@ -262,8 +272,8 @@ export default function BrainClient({
         {tab === "search"  && <SearchTab  captures={captures} />}
         {tab === "graph"   && <GraphTab   captures={captures} onRelatesUpdated={refreshCaptures} />}
         {tab === "digest"  && <DigestTab  captures={captures} userId={user.id} />}
-        {tab === "grow"    && <GrowthTab  captures={captures} setCaptures={setCaptures} reviewId={reviewId} />}
-        {tab === "chat"    && <ChatTab    captures={captures} />}
+        {tab === "grow"    && <GrowthTab  captures={captures} setCaptures={setCaptures} />}
+        {tab === "chat"    && <ChatTab    captures={captures} pinnedCapture={reviewId ? captures.find((c) => c.id === reviewId) ?? null : null} onMarkReviewed={markReviewed} />}
       </main>
 
       {/* Mobile bottom nav */}

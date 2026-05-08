@@ -5,37 +5,65 @@ import type { Capture } from "./BrainClient";
 
 type Message = { role: "user" | "assistant"; content: string };
 
-function findContext(query: string, captures: Capture[], n = 8) {
+function findContext(query: string, captures: Capture[], pinned: Capture | null, n = 8) {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  if (!words.length) return captures.slice(0, n);
-  return captures
-    .map((c) => {
-      const hay = `${c.title} ${c.text} ${c.type} ${c.project}`.toLowerCase();
-      const score = words.filter((w) => hay.includes(w)).length;
-      return { c, score };
-    })
-    .filter(({ score }) => score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, n)
-    .map(({ c }) => c);
+  const rest = pinned ? captures.filter((c) => c.id !== pinned.id) : captures;
+  const ranked = words.length
+    ? rest
+        .map((c) => {
+          const hay = `${c.title} ${c.text} ${c.type} ${c.project}`.toLowerCase();
+          const score = words.filter((w) => hay.includes(w)).length;
+          return { c, score };
+        })
+        .filter(({ score }) => score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, pinned ? n - 1 : n)
+        .map(({ c }) => c)
+    : rest.slice(0, pinned ? n - 1 : n);
+  return pinned ? [pinned, ...ranked] : ranked;
 }
 
-export default function ChatTab({ captures }: { captures: Capture[] }) {
+const TYPE_COLOR: Record<string, string> = {
+  Idea: "text-amber", Link: "text-blue", Task: "text-green", Learning: "text-purple", Note: "text-muted",
+};
+
+export default function ChatTab({
+  captures,
+  pinnedCapture,
+  onMarkReviewed,
+}: {
+  captures: Capture[];
+  pinnedCapture?: Capture | null;
+  onMarkReviewed?: (id: string) => void;
+}) {
   const [history, setHistory] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [reviewed, setReviewed] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Reset when pinned capture changes
+  useEffect(() => {
+    setHistory([]);
+    setReviewed(false);
+  }, [pinnedCapture?.id]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [history, loading]);
 
+  function handleMarkReviewed() {
+    if (!pinnedCapture) return;
+    setReviewed(true);
+    onMarkReviewed?.(pinnedCapture.id);
+  }
+
   async function send() {
     const msg = input.trim();
     if (!msg || loading) return;
 
-    const context = findContext(msg, captures).map((c) => ({
+    const context = findContext(msg, captures, pinnedCapture ?? null).map((c) => ({
       title: c.title,
       text: c.text,
       type: c.type,
@@ -67,19 +95,48 @@ export default function ChatTab({ captures }: { captures: Capture[] }) {
     if (e.key === "Enter" && e.ctrlKey) { e.preventDefault(); send(); }
   }
 
+  const suggestedQuestions = pinnedCapture
+    ? ["Explain this in simple terms", "How does this connect to my other captures?", "What should I do with this?"]
+    : ["What have I been learning lately?", "Any pending tasks?", "What ideas do I have about marketing?"];
+
   return (
     <div className="flex flex-col h-[calc(100vh-10rem)]">
+      {/* Pinned capture */}
+      {pinnedCapture && (
+        <div className={`mb-3 bg-surface terminal-border rounded-lg overflow-hidden transition-opacity ${reviewed ? "opacity-50" : ""}`}>
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-muted">// review this capture</span>
+              <span className={`text-[10px] ${TYPE_COLOR[pinnedCapture.type] ?? "text-muted"}`}>[{pinnedCapture.type}]</span>
+              <span className="text-[10px] text-muted">{pinnedCapture.project}</span>
+            </div>
+            {!reviewed ? (
+              <button
+                onClick={handleMarkReviewed}
+                className="text-xs px-3 py-1 border border-purple/40 text-purple rounded hover:bg-purple/10 transition-colors shrink-0"
+              >
+                done ✓
+              </button>
+            ) : (
+              <span className="text-[10px] text-green">reviewed ✓</span>
+            )}
+          </div>
+          <div className="px-4 py-3">
+            <p className="text-sm text-text font-medium mb-1">{pinnedCapture.title}</p>
+            <p className="text-xs text-muted leading-relaxed whitespace-pre-wrap line-clamp-4">{pinnedCapture.text}</p>
+          </div>
+        </div>
+      )}
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto space-y-3 pb-2">
         {history.length === 0 && (
-          <div className="text-center pt-12 space-y-3">
-            <p className="text-muted text-xs">// ask anything about your captures</p>
+          <div className="text-center pt-8 space-y-3">
+            <p className="text-muted text-xs">
+              {pinnedCapture ? "// ask anything about this capture" : "// ask anything about your captures"}
+            </p>
             <div className="flex flex-wrap gap-2 justify-center">
-              {[
-                "What have I been learning lately?",
-                "Any pending tasks?",
-                "What ideas do I have about marketing?",
-              ].map((q) => (
+              {suggestedQuestions.map((q) => (
                 <button
                   key={q}
                   onClick={() => { setInput(q); inputRef.current?.focus(); }}
@@ -125,7 +182,7 @@ export default function ChatTab({ captures }: { captures: Capture[] }) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="// ask about your knowledge base..."
+          placeholder={pinnedCapture ? "// ask about this capture..." : "// ask about your knowledge base..."}
           className="w-full bg-transparent text-text placeholder-muted text-sm p-3 resize-none focus:outline-none min-h-[72px] font-mono leading-relaxed"
           disabled={loading}
           autoFocus
