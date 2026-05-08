@@ -94,9 +94,11 @@ const DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
 export default function GrowthTab({
   captures,
   setCaptures,
+  taskId,
 }: {
   captures: Capture[];
   setCaptures: React.Dispatch<React.SetStateAction<Capture[]>>;
+  taskId?: string | null;
 }) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
@@ -212,6 +214,15 @@ export default function GrowthTab({
     } finally {
       setDeletingId(null);
     }
+  }
+
+  function updateTaskText(id: string, text: string) {
+    setCaptures((prev) => prev.map((c) => c.id === id ? { ...c, text } : c));
+    fetch(`/api/capture/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
   }
 
   return (
@@ -527,6 +538,8 @@ export default function GrowthTab({
                 task={task}
                 completing={deletingId === task.id}
                 onComplete={() => completeTask(task.id)}
+                onTextUpdate={updateTaskText}
+                initialExpanded={task.id === taskId}
               />
             ))}
           </div>
@@ -536,18 +549,63 @@ export default function GrowthTab({
   );
 }
 
+const PRIORITY_STYLE: Record<string, string> = {
+  high:   "text-red-400 border-red-400/40 bg-red-400/10",
+  medium: "text-amber border-amber/40 bg-amber/10",
+  low:    "text-green border-green/40 bg-green/10",
+};
+
+function dueDateLabel(due: string | null): { label: string; color: string } | null {
+  if (!due) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const d = new Date(due + "T00:00:00");
+  const diff = Math.round((d.getTime() - today.getTime()) / 86400_000);
+  if (diff < 0)  return { label: `overdue ${Math.abs(diff)}d`, color: "text-red-400" };
+  if (diff === 0) return { label: "due today", color: "text-amber" };
+  if (diff === 1) return { label: "due tomorrow", color: "text-amber" };
+  return { label: `due in ${diff}d`, color: "text-muted" };
+}
+
+function parseSubtasks(text: string) {
+  return text.split("\n")
+    .map((line, idx) => {
+      const m = line.match(/^(\s*)\[([ x])\] (.+)$/);
+      if (!m) return null;
+      return { idx, done: m[2] === "x", text: m[3] };
+    })
+    .filter(Boolean) as { idx: number; done: boolean; text: string }[];
+}
+
+function toggleSubtask(text: string, lineIdx: number): string {
+  return text.split("\n").map((line, i) => {
+    if (i !== lineIdx) return line;
+    return line.includes("[ ]") ? line.replace("[ ]", "[x]") : line.replace("[x]", "[ ]");
+  }).join("\n");
+}
+
 function TaskRow({
   task,
   completing,
   onComplete,
+  onTextUpdate,
 }: {
   task: Capture;
   completing: boolean;
   onComplete: () => void;
+  onTextUpdate: (id: string, text: string) => void;
+  initialExpanded?: boolean;
 }) {
   const [confirm, setConfirm] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(initialExpanded ?? false);
   const age = Math.floor((Date.now() - new Date(task.created_at).getTime()) / 86400_000);
+  const subtasks = parseSubtasks(task.text);
+  const due = dueDateLabel(task.due_date);
+
+  function handleSubtaskToggle(e: React.MouseEvent, lineIdx: number) {
+    e.stopPropagation();
+    const newText = toggleSubtask(task.text, lineIdx);
+    onTextUpdate(task.id, newText);
+  }
 
   return (
     <div className={`border-b border-border last:border-0 transition-opacity duration-500 ${completing ? "opacity-40" : "opacity-100"}`}>
@@ -565,16 +623,29 @@ function TaskRow({
           {confirm && "✓"}
         </button>
         <div className="flex-1 min-w-0">
-          <p className={`text-sm leading-snug ${confirm ? "line-through text-muted" : "text-text"}`}>
-            {task.title}
-          </p>
-          {!expanded && task.text !== task.title && (
+          <div className="flex items-center gap-2 flex-wrap mb-0.5">
+            <p className={`text-sm leading-snug ${confirm ? "line-through text-muted" : "text-text"}`}>
+              {task.title}
+            </p>
+            {task.priority && task.priority !== "medium" && (
+              <span className={`text-[10px] px-1.5 py-0 rounded border ${PRIORITY_STYLE[task.priority]}`}>
+                {task.priority}
+              </span>
+            )}
+          </div>
+          {!expanded && subtasks.length === 0 && task.text !== task.title && (
             <p className="text-xs text-muted mt-0.5 truncate">{task.text.slice(0, 80)}</p>
           )}
-          <div className="flex gap-3 mt-1 text-[10px] text-muted">
-            <span>{task.project}</span>
-            <span>{age === 0 ? "today" : age === 1 ? "yesterday" : `${age}d ago`}</span>
-            <span>{expanded ? "▴" : "▾"}</span>
+          {!expanded && subtasks.length > 0 && (
+            <p className="text-xs text-muted mt-0.5">
+              {subtasks.filter((s) => s.done).length}/{subtasks.length} done
+            </p>
+          )}
+          <div className="flex gap-3 mt-1 text-[10px] flex-wrap">
+            <span className="text-muted">{task.project}</span>
+            <span className="text-muted">{age === 0 ? "today" : age === 1 ? "yesterday" : `${age}d ago`}</span>
+            {due && <span className={due.color}>{due.label}</span>}
+            <span className="text-muted">{expanded ? "▴" : "▾"}</span>
           </div>
         </div>
         {confirm && (
@@ -587,9 +658,36 @@ function TaskRow({
         )}
       </div>
       {expanded && (
-        <div className="px-5 pb-4 bg-bg/40 animate-fade-in">
-          <p className="text-sm text-text leading-7 whitespace-pre-wrap">{task.text}</p>
-          <p className="text-[10px] text-muted mt-2">{task.project}</p>
+        <div className="animate-fade-in">
+          {subtasks.length > 0 ? (
+            <div className="px-5 py-3 bg-bg/40 space-y-2">
+              {subtasks.map((st) => (
+                <div
+                  key={st.idx}
+                  className="flex items-start gap-2 cursor-pointer group"
+                  onClick={(e) => handleSubtaskToggle(e, st.idx)}
+                >
+                  <div className={`mt-0.5 w-3.5 h-3.5 shrink-0 rounded border flex items-center justify-center text-[10px] transition-colors ${
+                    st.done ? "border-green bg-green/20 text-green" : "border-border group-hover:border-green"
+                  }`}>
+                    {st.done && "✓"}
+                  </div>
+                  <p className={`text-xs leading-snug ${st.done ? "line-through text-muted" : "text-text"}`}>
+                    {st.text}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="px-5 py-3 bg-bg/40">
+              <p className="text-sm text-text leading-7 whitespace-pre-wrap">{task.text}</p>
+            </div>
+          )}
+          <div className="flex items-center gap-3 px-4 py-2 border-t border-border text-[10px] text-muted">
+            <span>{task.project}</span>
+            {due && <span className={due.color}>{due.label}</span>}
+            {task.priority && <span className={PRIORITY_STYLE[task.priority]?.split(" ")[0]}>{task.priority} priority</span>}
+          </div>
         </div>
       )}
     </div>

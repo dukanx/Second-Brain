@@ -5,8 +5,8 @@ self.addEventListener("push", (event) => {
       body: data.body ?? "",
       icon: "/SBicon.png",
       badge: "/SBicon.png",
-      tag: "review-reminder",
-      data: { captureId: data.captureId ?? null },
+      tag: data.notifType === "task" ? "task-due" : "review-reminder",
+      data: { captureId: data.captureId ?? null, notifType: data.notifType ?? "review" },
     })
   );
 });
@@ -14,12 +14,14 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const captureId = event.notification.data?.captureId;
-  const url = captureId ? `/brain?review=${captureId}` : "/brain";
+  const notifType = event.notification.data?.notifType ?? "review";
+  const param = notifType === "task" ? "task" : "review";
+  const url = captureId ? `/brain?${param}=${captureId}` : "/brain";
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
       const brainClient = list.find((c) => c.url.includes("/brain"));
       if (brainClient) {
-        if (captureId) brainClient.postMessage({ type: "open-review", captureId });
+        if (captureId) brainClient.postMessage({ type: notifType === "task" ? "open-task" : "open-review", captureId });
         return brainClient.focus();
       }
       return clients.openWindow(url);

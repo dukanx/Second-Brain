@@ -23,6 +23,8 @@ export type Capture = {
   created_at: string;
   starred: boolean;
   last_reviewed_at: string | null;
+  due_date: string | null;
+  priority: "high" | "medium" | "low";
 };
 
 type Tab = "capture" | "search" | "graph" | "digest" | "grow" | "chat";
@@ -59,6 +61,7 @@ export default function BrainClient({
   const [searchOpen, setSearchOpen] = useState(false);
   const [notifStatus, setNotifStatus] = useState<"unknown" | "granted" | "denied" | "subscribed">("unknown");
   const [reviewId, setReviewId] = useState<string | null>(null);
+  const [taskId, setTaskId] = useState<string | null>(null);
   const router   = useRouter();
   const supabase = createClient();
 
@@ -151,10 +154,15 @@ export default function BrainClient({
   useEffect(() => {
     // App opened from notification (URL param)
     const params = new URLSearchParams(window.location.search);
-    const id = params.get("review");
-    if (id) {
+    const reviewParam = params.get("review");
+    const taskParam = params.get("task");
+    if (reviewParam) {
       setTab("chat");
-      setReviewId(id);
+      setReviewId(reviewParam);
+      window.history.replaceState({}, "", "/brain");
+    } else if (taskParam) {
+      setTab("grow");
+      setTaskId(taskParam);
       window.history.replaceState({}, "", "/brain");
     }
     // App already open — notification click sends postMessage
@@ -163,6 +171,9 @@ export default function BrainClient({
         if (e.data?.type === "open-review" && e.data?.captureId) {
           setTab("chat");
           setReviewId(e.data.captureId);
+        } else if (e.data?.type === "open-task" && e.data?.captureId) {
+          setTab("grow");
+          setTaskId(e.data.captureId);
         }
       };
       navigator.serviceWorker.addEventListener("message", handler);
@@ -272,7 +283,7 @@ export default function BrainClient({
         {tab === "search"  && <SearchTab  captures={captures} />}
         {tab === "graph"   && <GraphTab   captures={captures} onRelatesUpdated={refreshCaptures} />}
         {tab === "digest"  && <DigestTab  captures={captures} userId={user.id} />}
-        {tab === "grow"    && <GrowthTab  captures={captures} setCaptures={setCaptures} />}
+        {tab === "grow"    && <GrowthTab  captures={captures} setCaptures={setCaptures} taskId={taskId} />}
         {tab === "chat"    && <ChatTab    captures={captures} pinnedCapture={reviewId ? captures.find((c) => c.id === reviewId) ?? null : null} onMarkReviewed={markReviewed} />}
       </main>
 

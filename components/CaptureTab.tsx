@@ -32,6 +32,8 @@ export default function CaptureTab({
   setCaptures: React.Dispatch<React.SetStateAction<Capture[]>>;
 }) {
   const [text, setText] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [priority, setPriority] = useState<"high" | "medium" | "low">("medium");
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Capture | null>(null);
   const [relateStatus, setRelateStatus] = useState("");
@@ -57,7 +59,7 @@ export default function CaptureTab({
       const res = await fetch("/api/capture", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: text.trim() }),
+        body: JSON.stringify({ text: text.trim(), due_date: dueDate || undefined, priority: isTaskMode ? priority : undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to save");
@@ -65,6 +67,8 @@ export default function CaptureTab({
       setCaptures((prev) => [data.capture, ...prev]);
       setLastSaved(data.capture);
       setText("");
+      setDueDate("");
+      setPriority("medium");
       textareaRef.current?.focus();
 
       // Relate in background, show feedback
@@ -93,7 +97,7 @@ export default function CaptureTab({
     } finally {
       setSaving(false);
     }
-  }, [text, saving, setCaptures]);
+  }, [text, dueDate, priority, saving, setCaptures]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && e.ctrlKey) { e.preventDefault(); save(); }
@@ -141,6 +145,7 @@ export default function CaptureTab({
   }, [captures, filterStarred, filterType, filterProject, sort]);
 
   const isUrl = text.trim().startsWith("http");
+  const isTaskMode = text.includes("[ ]") || text.trim().startsWith("[ ]");
 
   function exportJSON() {
     const blob = new Blob([JSON.stringify(captures, null, 2)], { type: "application/json" });
@@ -202,6 +207,44 @@ export default function CaptureTab({
           autoFocus
           disabled={saving}
         />
+        {isTaskMode && (
+          <div className="px-4 py-2 border-t border-border space-y-2">
+            <div className="flex gap-1.5">
+              {(["low", "medium", "high"] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPriority(p)}
+                  className={`flex-1 text-[11px] py-1 rounded border transition-colors ${
+                    priority === p
+                      ? p === "high"   ? "border-red-400 text-red-400 bg-red-400/10"
+                        : p === "medium" ? "border-amber text-amber bg-amber/10"
+                        : "border-green text-green bg-green/10"
+                      : "border-border text-muted hover:border-text"
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                style={{ colorScheme: "dark" }}
+                className="flex-1 bg-bg border border-border rounded px-3 py-1.5 text-xs text-text focus:outline-none focus:border-amber transition-colors"
+              />
+              {dueDate && (
+                <button
+                  onClick={() => setDueDate("")}
+                  className="text-muted hover:text-red-400 text-sm transition-colors shrink-0"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         <div className="flex items-center justify-between gap-3 px-4 py-2 border-t border-border">
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted">{text.length} chars</span>

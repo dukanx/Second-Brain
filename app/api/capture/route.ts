@@ -33,7 +33,7 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { text } = await request.json();
+  const { text, due_date, priority } = await request.json();
   if (!text?.trim()) return NextResponse.json({ error: "Empty text" }, { status: 400 });
 
   // Enrich URLs with page metadata before AI processing
@@ -68,9 +68,13 @@ Return ONLY the JSON object, nothing else.`,
     // AI unavailable — save with defaults
   }
 
+  const extra: Record<string, string> = {};
+  if (due_date) extra.due_date = due_date;
+  if (priority && ["high", "medium", "low"].includes(priority)) extra.priority = priority;
+
   const { data: capture, error } = await supabase
     .from("captures")
-    .insert({ user_id: user.id, text, title, type, project, related_ids: [] })
+    .insert({ user_id: user.id, text, title, type, project, related_ids: [], ...extra })
     .select()
     .single();
 

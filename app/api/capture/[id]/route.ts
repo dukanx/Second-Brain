@@ -34,7 +34,7 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await request.json();
-  const allowed = ["starred", "last_reviewed_at"];
+  const allowed = ["starred", "last_reviewed_at", "due_date", "priority", "text"];
   const patch = Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)));
 
   const { data, error } = await supabase
