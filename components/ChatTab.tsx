@@ -63,12 +63,9 @@ export default function ChatTab({
     const msg = input.trim();
     if (!msg || loading) return;
 
-    const context = findContext(msg, captures, pinnedCapture ?? null).map((c) => ({
-      title: c.title,
-      text: c.text,
-      type: c.type,
-      project: c.project,
-    }));
+    const context = findContext(msg, captures, pinnedCapture ?? null)
+      .filter((c) => c.id !== pinnedCapture?.id)
+      .map((c) => ({ title: c.title, text: c.text, type: c.type, project: c.project }));
 
     const newHistory: Message[] = [...history, { role: "user", content: msg }];
     setHistory(newHistory);
@@ -79,7 +76,14 @@ export default function ChatTab({
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: msg, history, context }),
+        body: JSON.stringify({
+          message: msg,
+          history,
+          context,
+          pinnedCapture: pinnedCapture
+            ? { title: pinnedCapture.title, text: pinnedCapture.text, type: pinnedCapture.type, project: pinnedCapture.project }
+            : null,
+        }),
       });
       const data = await res.json();
       if (data.reply) {
@@ -121,9 +125,9 @@ export default function ChatTab({
               <span className="text-[10px] text-green">reviewed ✓</span>
             )}
           </div>
-          <div className="px-4 py-3">
+          <div className="px-4 py-3 max-h-40 overflow-y-auto">
             <p className="text-sm text-text font-medium mb-1">{pinnedCapture.title}</p>
-            <p className="text-xs text-muted leading-relaxed whitespace-pre-wrap line-clamp-4">{pinnedCapture.text}</p>
+            <p className="text-xs text-muted leading-relaxed whitespace-pre-wrap">{pinnedCapture.text}</p>
           </div>
         </div>
       )}

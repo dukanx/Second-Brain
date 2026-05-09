@@ -12,25 +12,29 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { message, history, context } = await request.json() as {
+  const { message, history, context, pinnedCapture } = await request.json() as {
     message: string;
     history: Message[];
     context: ContextCapture[];
+    pinnedCapture?: ContextCapture | null;
   };
 
-  const contextBlock = context.length > 0
-    ? context.map((c) => `[${c.type}][${c.project}] ${c.title}: ${c.text.slice(0, 120)}`).join("\n")
-    : "No relevant captures found.";
+  const pinnedBlock = pinnedCapture
+    ? `The user is currently reviewing this specific capture. When they say "this", "it", or ask about the topic without specifying, they mean THIS capture:\n\n[${pinnedCapture.type}][${pinnedCapture.project}] ${pinnedCapture.title}\n${pinnedCapture.text}\n\n`
+    : "";
 
-  const recentHistory = history.slice(-4);
+  const contextBlock = context.length > 0
+    ? `Additional captures from their knowledge base:\n${context.map((c) => `[${c.type}][${c.project}] ${c.title}: ${c.text.slice(0, 150)}`).join("\n")}`
+    : "";
+
+  const recentHistory = history.slice(-6);
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 500,
-    system: `You are a helpful assistant for a personal knowledge base. Answer concisely based on the user's captures below. If the answer isn't in the captures, say so briefly.
+    max_tokens: 600,
+    system: `You are a helpful assistant for a personal knowledge base. Answer concisely based on the user's captures. If the answer isn't in the captures, say so briefly.
 
-Relevant captures:
-${contextBlock}`,
+${pinnedBlock}${contextBlock}`.trim(),
     messages: [
       ...recentHistory,
       { role: "user", content: message },
