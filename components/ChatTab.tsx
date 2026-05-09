@@ -40,6 +40,7 @@ export default function ChatTab({
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [reviewed, setReviewed] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -106,6 +107,39 @@ export default function ChatTab({
   return (
     <div className="flex flex-col h-[calc(100vh-10rem)]">
       {/* Pinned capture */}
+      {/* Fullscreen expand modal */}
+      {expanded && pinnedCapture && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setExpanded(false)}
+        >
+          <div
+            className="w-full max-w-2xl bg-surface border border-border rounded-xl overflow-hidden shadow-2xl animate-fade-in flex flex-col max-h-[85vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <span className={`text-xs ${TYPE_COLOR[pinnedCapture.type] ?? "text-muted"}`}>[{pinnedCapture.type}]</span>
+                <span className="text-xs text-muted">{pinnedCapture.project}</span>
+              </div>
+              <button onClick={() => setExpanded(false)} className="text-muted hover:text-text text-sm transition-colors">✕</button>
+            </div>
+            <div className="px-5 py-5 overflow-y-auto flex-1">
+              <p className="text-sm text-white font-semibold mb-3">{pinnedCapture.title}</p>
+              <p className="text-sm text-white leading-6 whitespace-pre-wrap">{pinnedCapture.text}</p>
+            </div>
+            <div className="px-5 py-3 border-t border-border shrink-0">
+              <button
+                onClick={() => setExpanded(false)}
+                className="text-xs text-muted hover:text-text transition-colors"
+              >
+                ← zatvori
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {pinnedCapture && (
         <div className={`mb-3 bg-surface terminal-border rounded-lg overflow-hidden transition-opacity ${reviewed ? "opacity-50" : ""}`}>
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
@@ -114,16 +148,25 @@ export default function ChatTab({
               <span className={`text-[10px] ${TYPE_COLOR[pinnedCapture.type] ?? "text-muted"}`}>[{pinnedCapture.type}]</span>
               <span className="text-[10px] text-muted">{pinnedCapture.project}</span>
             </div>
-            {!reviewed ? (
+            <div className="flex items-center gap-2">
               <button
-                onClick={handleMarkReviewed}
-                className="text-xs px-3 py-1 border border-purple/40 text-purple rounded hover:bg-purple/10 transition-colors shrink-0"
+                onClick={() => setExpanded(true)}
+                className="text-[10px] text-muted hover:text-text border border-border rounded px-2 py-1 transition-colors"
+                title="Expand"
               >
-                done ✓
+                ⤢
               </button>
-            ) : (
-              <span className="text-[10px] text-green">reviewed ✓</span>
-            )}
+              {!reviewed ? (
+                <button
+                  onClick={handleMarkReviewed}
+                  className="text-xs px-3 py-1 border border-purple/40 text-purple rounded hover:bg-purple/10 transition-colors shrink-0"
+                >
+                  done ✓
+                </button>
+              ) : (
+                <span className="text-[10px] text-green">reviewed ✓</span>
+              )}
+            </div>
           </div>
           <div className="px-4 py-3 max-h-40 overflow-y-auto">
             <p className="text-sm text-text font-medium mb-1">{pinnedCapture.title}</p>
