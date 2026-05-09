@@ -598,13 +598,15 @@ function TaskRow({
 }) {
   const [confirm, setConfirm] = useState(false);
   const [expanded, setExpanded] = useState(initialExpanded ?? false);
+  const [localText, setLocalText] = useState(task.text);
   const age = Math.floor((Date.now() - new Date(task.created_at).getTime()) / 86400_000);
-  const subtasks = parseSubtasks(task.text);
+  const subtasks = parseSubtasks(localText);
   const due = dueDateLabel(task.due_date);
 
   function handleSubtaskToggle(e: React.MouseEvent, lineIdx: number) {
     e.stopPropagation();
-    const newText = toggleSubtask(task.text, lineIdx);
+    const newText = toggleSubtask(localText, lineIdx);
+    setLocalText(newText);
     onTextUpdate(task.id, newText);
   }
 

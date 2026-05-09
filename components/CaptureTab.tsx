@@ -104,8 +104,27 @@ export default function CaptureTab({
   }
 
   function applyTemplate(prefix: string) {
-    setText((prev) => (prev ? prev : prefix));
+    setText((prev) => {
+      const stripped = prev.replace(/^(\[[ x]\] |Idea: |TIL: )/, "");
+      return prefix + stripped;
+    });
     textareaRef.current?.focus();
+  }
+
+  function addSubtask() {
+    setText((prev) => {
+      const newText = prev.endsWith("\n") ? prev + "[ ] " : prev + "\n[ ] ";
+      return newText;
+    });
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "auto";
+        textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+        textareaRef.current.focus();
+        textareaRef.current.selectionStart = textareaRef.current.value.length;
+        textareaRef.current.selectionEnd = textareaRef.current.value.length;
+      }
+    }, 0);
   }
 
   function toggleRecording() {
@@ -253,16 +272,35 @@ export default function CaptureTab({
               title={recording ? "stop recording" : "voice capture"}
               className={`text-sm leading-none transition-colors ${recording ? "text-red-400 animate-pulse" : "text-muted hover:text-amber"}`}
             >
-              {recording ? "⏹" : "🎤"}
+              {recording ? (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+              ) : (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <rect x="9" y="2" width="6" height="12" rx="3"/>
+                  <path d="M5 10a7 7 0 0 0 14 0"/>
+                  <line x1="12" y1="17" x2="12" y2="22"/>
+                  <line x1="9" y1="22" x2="15" y2="22"/>
+                </svg>
+              )}
             </button>
           </div>
-          <button
-            onClick={save}
-            disabled={!text.trim() || saving}
-            className="text-xs px-4 py-1.5 bg-amber text-bg rounded font-bold hover:bg-yellow-400 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {saving ? "saving..." : "save()"}
-          </button>
+          <div className="flex items-center gap-2">
+            {isTaskMode && (
+              <button
+                onClick={addSubtask}
+                className="text-[10px] text-muted hover:text-green border border-border hover:border-green rounded px-2 py-1.5 transition-colors"
+              >
+                + subtask
+              </button>
+            )}
+            <button
+              onClick={save}
+              disabled={!text.trim() || saving}
+              className="text-xs px-4 py-1.5 bg-amber text-bg rounded font-bold hover:bg-yellow-400 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {saving ? "saving..." : "save()"}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -498,6 +536,17 @@ function CaptureCard({
       {expanded && mode === "view" && (
         <div className="border-t border-border animate-fade-in">
           <div className="px-5 py-5 bg-bg/40">
+            {capture.type === "Link" && (() => {
+              const url = capture.text.match(/https?:\/\/[^\s]+/)?.[0];
+              return url ? (
+                <a href={url} target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-blue hover:underline break-all block mb-3"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {url}
+                </a>
+              ) : null;
+            })()}
             <p className="text-sm text-text leading-7 whitespace-pre-wrap">{capture.text}</p>
           </div>
           <div className="flex items-center justify-between px-4 py-3 border-t border-border">
