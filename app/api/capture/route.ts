@@ -39,8 +39,18 @@ export async function POST(request: Request) {
   // Enrich URLs with page metadata before AI processing
   const aiInput = isUrl(text.trim()) ? await enrichUrl(text.trim()) : text;
 
+  const { data: userProjects } = await supabase
+    .from("projects")
+    .select("name")
+    .eq("user_id", user.id);
+  const projectNames = userProjects?.map((p) => p.name) ?? [];
+  const fallbackProject = projectNames[projectNames.length - 1] ?? "Other";
+  const projectList = projectNames.length > 0
+    ? projectNames.map((n) => `"${n}"`).join(" | ")
+    : '"Other"';
+
   let type = "Note";
-  let project = "Other";
+  let project = fallbackProject;
   let title = text.slice(0, 60);
 
   try {
@@ -49,7 +59,7 @@ export async function POST(request: Request) {
       max_tokens: 256,
       system: `You are a knowledge categorization AI. Analyze the given text and return ONLY valid JSON with these fields:
 - type: one of "Idea" | "Link" | "Task" | "Learning" | "Note"
-- project: one of "Village Booker" | "Glumac Plus" | "FON" | "Personal" | "Other"
+- project: one of ${projectList}
 - title: a short, descriptive title (max 60 chars, no quotes)
 
 Return ONLY the JSON object, nothing else.`,
@@ -61,7 +71,8 @@ Return ONLY the JSON object, nothing else.`,
       const raw = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
       const parsed = JSON.parse(raw);
       type = parsed.type ?? type;
-      project = parsed.project ?? project;
+      const validProjects = new Set(projectNames);
+      project = validProjects.has(parsed.project) ? parsed.project : fallbackProject;
       title = parsed.title ?? title;
     }
   } catch {

@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import type { Capture } from "./BrainClient";
+import { useState, useEffect, useRef, useMemo } from "react";
+import type { Capture, Project } from "./BrainClient";
 import { TYPE_COLORS } from "./BrainClient";
 
-const PROJECT_COLOR: Record<string, string> = {
-  "Village Booker": "#f59e0b", "Glumac Plus": "#a78bfa",
-  FON: "#60a5fa", Personal: "#34d399", Other: "#6b7280",
-};
+function abbrev(name: string): string {
+  const words = name.trim().split(/\s+/);
+  if (words.length === 1) return name.slice(0, 3);
+  return words.map((w) => w[0]).join("").toUpperCase().slice(0, 3);
+}
 
 function match(capture: Capture, words: string[]): boolean {
   const hay = `${capture.title} ${capture.text} ${capture.type} ${capture.project}`.toLowerCase();
@@ -25,11 +26,17 @@ function highlight(text: string, words: string[]): React.ReactNode {
 
 export default function SearchOverlay({
   captures,
+  projects,
   onClose,
 }: {
   captures: Capture[];
+  projects: Project[];
   onClose: () => void;
 }) {
+  const projectColorMap = useMemo(
+    () => Object.fromEntries(projects.map((p) => [p.name, p.color])),
+    [projects]
+  );
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Capture | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -103,8 +110,8 @@ export default function SearchOverlay({
                       <span className="text-sm text-text truncate flex-1">
                         {highlight(c.title, words)}
                       </span>
-                      <span className="text-xs shrink-0" style={{ color: PROJECT_COLOR[c.project] ?? "#6b7280" }}>
-                        {c.project === "Village Booker" ? "VB" : c.project === "Glumac Plus" ? "GP" : c.project}
+                      <span className="text-xs shrink-0" style={{ color: projectColorMap[c.project] ?? "#6b7280" }}>
+                        {abbrev(c.project)}
                       </span>
                     </div>
                     {words.length > 0 && (

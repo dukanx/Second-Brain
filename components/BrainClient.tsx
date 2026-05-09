@@ -27,6 +27,13 @@ export type Capture = {
   priority: "high" | "medium" | "low";
 };
 
+export type Project = {
+  id: string;
+  user_id: string;
+  name: string;
+  color: string;
+};
+
 type Tab = "capture" | "search" | "graph" | "digest" | "grow" | "chat";
 
 const TYPE_COLORS: Record<string, string> = {
@@ -57,6 +64,7 @@ export default function BrainClient({
 }) {
   const [tab, setTab]           = useState<Tab>("capture");
   const [captures, setCaptures] = useState<Capture[]>(initialCaptures);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [syncing, setSyncing]   = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [notifStatus, setNotifStatus] = useState<"unknown" | "granted" | "denied" | "subscribed">("unknown");
@@ -64,6 +72,24 @@ export default function BrainClient({
   const [taskId, setTaskId] = useState<string | null>(null);
   const router   = useRouter();
   const supabase = createClient();
+
+  useEffect(() => {
+    fetch("/api/projects")
+      .then((r) => r.json())
+      .then((d) => { if (d.projects) setProjects(d.projects); })
+      .catch(() => {});
+  }, []);
+
+  const handleProjectCreated = useCallback(async (name: string): Promise<Project> => {
+    const res = await fetch("/api/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    const data = await res.json();
+    if (data.project) setProjects((prev) => [...prev, data.project]);
+    return data.project;
+  }, []);
 
   // ── Visibility-based sync (free alternative to Realtime) ─────
   const sync = useCallback(async (quiet = false) => {
@@ -211,7 +237,7 @@ export default function BrainClient({
 
   return (
     <div className="min-h-screen bg-bg flex flex-col">
-      {searchOpen && <SearchOverlay captures={captures} onClose={() => setSearchOpen(false)} />}
+      {searchOpen && <SearchOverlay captures={captures} projects={projects} onClose={() => setSearchOpen(false)} />}
       {/* Header */}
       <header className="bg-surface border-b border-border px-4 py-3 flex items-center justify-between sticky top-0 z-20">
         <div className="flex items-center gap-3">
@@ -279,9 +305,9 @@ export default function BrainClient({
 
       {/* Main */}
       <main className="flex-1 container mx-auto max-w-5xl px-4 py-5 pb-24 sm:pb-6">
-        {tab === "capture" && <CaptureTab captures={captures} setCaptures={setCaptures} />}
+        {tab === "capture" && <CaptureTab captures={captures} setCaptures={setCaptures} projects={projects} onProjectCreated={handleProjectCreated} />}
         {tab === "search"  && <SearchTab  captures={captures} />}
-        {tab === "graph"   && <GraphTab   captures={captures} onRelatesUpdated={refreshCaptures} />}
+        {tab === "graph"   && <GraphTab   captures={captures} projects={projects} onRelatesUpdated={refreshCaptures} />}
         {tab === "digest"  && <DigestTab  captures={captures} userId={user.id} />}
         {tab === "grow"    && <GrowthTab  captures={captures} setCaptures={setCaptures} taskId={taskId} />}
         {tab === "chat"    && <ChatTab    captures={captures} pinnedCapture={reviewId ? captures.find((c) => c.id === reviewId) ?? null : null} onMarkReviewed={markReviewed} />}

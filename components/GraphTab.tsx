@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
-import type { Capture } from "./BrainClient";
+import { useEffect, useRef, useState, useMemo } from "react";
+import type { Capture, Project } from "./BrainClient";
 
 type Node = {
   id: string;
@@ -27,29 +27,38 @@ const TYPE_COLORS: Record<string, string> = {
   Note: "#94a3b8",
 };
 
-const PROJECT_COLORS: Record<string, string> = {
-  "Village Booker": "#f59e0b",
-  "Glumac Plus":    "#a78bfa",
-  FON:              "#60a5fa",
-  Personal:         "#34d399",
-  Other:            "#6b7280",
-};
-
-const PROJECT_ANCHORS: Record<string, [number, number]> = {
-  "Village Booker": [0.25, 0.3],
-  "Glumac Plus":    [0.75, 0.3],
-  FON:              [0.5,  0.7],
-  Personal:         [0.25, 0.72],
-  Other:            [0.75, 0.72],
-};
-
 type ColorMode = "project" | "type";
+
+function abbrev(name: string): string {
+  const words = name.trim().split(/\s+/);
+  if (words.length === 1) return name.slice(0, 3);
+  return words.map((w) => w[0]).join("").toUpperCase().slice(0, 3);
+}
+
+function computeAnchors(names: string[]): Record<string, [number, number]> {
+  const n = names.length;
+  if (n === 0) return {};
+  if (n === 1) return { [names[0]]: [0.5, 0.5] };
+  const cols = Math.ceil(Math.sqrt(n));
+  const rows = Math.ceil(n / cols);
+  return Object.fromEntries(
+    names.map((name, i) => {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const x = cols === 1 ? 0.5 : 0.15 + (col / (cols - 1)) * 0.7;
+      const y = rows === 1 ? 0.5 : 0.15 + (row / (rows - 1)) * 0.7;
+      return [name, [x, y] as [number, number]];
+    })
+  );
+}
 
 export default function GraphTab({
   captures,
+  projects,
   onRelatesUpdated,
 }: {
   captures: Capture[];
+  projects: Project[];
   onRelatesUpdated?: () => void;
 }) {
   const canvasRef   = useRef<HTMLCanvasElement>(null);
@@ -72,30 +81,49 @@ export default function GraphTab({
   const colorModeRef = useRef<ColorMode>("project");
   colorModeRef.current = colorMode;
 
-  // Filters
-  const [hiddenProjects, setHiddenProjects] = useState<Set<string>>(new Set());
-  const [hiddenTypes, setHiddenTypes]       = useState<Set<string>>(new Set());
-  const hiddenProjectsRef = useRef(hiddenProjects);
-  const hiddenTypesRef    = useRef(hiddenTypes);
-  hiddenProjectsRef.current = hiddenProjects;
-  hiddenTypesRef.current    = hiddenTypes;
+  // Filters — empty set = show all (opt-in selection)
+  const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
+  const [selectedTypes, setSelectedTypes]       = useState<Set<string>>(new Set());
+  const selectedProjectsRef = useRef(selectedProjects);
+  const selectedTypesRef    = useRef(selectedTypes);
+  selectedProjectsRef.current = selectedProjects;
+  selectedTypesRef.current    = selectedTypes;
 
   const [relating, setRelating]         = useState(false);
   const [relateResult, setRelateResult] = useState("");
   const [showFilters, setShowFilters]   = useState(false);
 
-  const ALL_PROJECTS = ["Village Booker", "Glumac Plus", "FON", "Personal", "Other"];
+  const ALL_PROJECTS = useMemo(() => projects.map((p) => p.name), [projects]);
+  const projectColors = useMemo(
+    () => Object.fromEntries(projects.map((p) => [p.name, p.color])),
+    [projects]
+  );
+  const projectAnchors = useMemo(() => computeAnchors(ALL_PROJECTS), [ALL_PROJECTS]);
+  const effectiveAnchors = useMemo(() => {
+    if (selectedProjects.size === 0) return projectAnchors;
+    return computeAnchors([...selectedProjects]);
+  }, [selectedProjects, projectAnchors]);
+  const projectColorsRef  = useRef<Record<string, string>>({});
+  const projectAnchorsRef = useRef<Record<string, [number, number]>>({});
+  const effectiveAnchorsRef = useRef<Record<string, [number, number]>>({});
+  projectColorsRef.current  = projectColors;
+  projectAnchorsRef.current = projectAnchors;
+  effectiveAnchorsRef.current = effectiveAnchors;
+
+  const reheatRef = useRef(false);
+  useEffect(() => { reheatRef.current = true; }, [selectedProjects, selectedTypes]);
+
   const ALL_TYPES    = ["Idea", "Link", "Task", "Learning", "Note"];
 
   function toggleProject(p: string) {
-    setHiddenProjects((prev) => {
+    setSelectedProjects((prev) => {
       const next = new Set(prev);
       next.has(p) ? next.delete(p) : next.add(p);
       return next;
     });
   }
   function toggleType(t: string) {
-    setHiddenTypes((prev) => {
+    setSelectedTypes((prev) => {
       const next = new Set(prev);
       next.has(t) ? next.delete(t) : next.add(t);
       return next;
@@ -103,7 +131,9 @@ export default function GraphTab({
   }
 
   function isNodeVisible(n: Node) {
-    return !hiddenProjectsRef.current.has(n.project) && !hiddenTypesRef.current.has(n.type);
+    const projOk = selectedProjectsRef.current.size === 0 || selectedProjectsRef.current.has(n.project);
+    const typeOk = selectedTypesRef.current.size === 0 || selectedTypesRef.current.has(n.type);
+    return projOk && typeOk;
   }
 
   // Coordinate helpers
@@ -190,10 +220,18 @@ export default function GraphTab({
       const edges = edgesRef.current;
       const hovered = hoveredRef.current;
 
+      if (reheatRef.current) {
+        for (const n of nodes) {
+          if (isNodeVisible(n)) { n.vx += (Math.random() - 0.5) * 18; n.vy += (Math.random() - 0.5) * 18; }
+        }
+        reheatRef.current = false;
+      }
       for (let i = 0; i < nodes.length; i++) {
         const a = nodes[i];
+        if (!isNodeVisible(a)) continue;
         for (let j = i + 1; j < nodes.length; j++) {
           const b = nodes[j];
+          if (!isNodeVisible(b)) continue;
           const dx = b.x - a.x, dy = b.y - a.y;
           const dist = Math.sqrt(dx * dx + dy * dy) || 1;
           const force = (1200 / (dist * dist)) * Math.min(dist / 80, 1);
@@ -202,7 +240,7 @@ export default function GraphTab({
         }
         a.vx += (W / 2 - a.x) * 0.0006;
         a.vy += (H / 2 - a.y) * 0.0006;
-        const anchor = PROJECT_ANCHORS[a.project];
+        const anchor = effectiveAnchorsRef.current[a.project];
         if (anchor) {
           a.vx += (anchor[0] * W - a.x) * 0.004;
           a.vy += (anchor[1] * H - a.y) * 0.004;
@@ -211,7 +249,7 @@ export default function GraphTab({
       for (const edge of edges) {
         const src = nodes.find((n) => n.id === edge.source);
         const tgt = nodes.find((n) => n.id === edge.target);
-        if (!src || !tgt) continue;
+        if (!src || !tgt || !isNodeVisible(src) || !isNodeVisible(tgt)) continue;
         const dx = tgt.x - src.x, dy = tgt.y - src.y;
         const dist = Math.sqrt(dx * dx + dy * dy) || 1;
         const force = (dist - 100) * 0.025;
@@ -219,7 +257,7 @@ export default function GraphTab({
         src.vx += fx; src.vy += fy; tgt.vx -= fx; tgt.vy -= fy;
       }
       for (const n of nodes) {
-        if (draggingRef.current === n.id) continue;
+        if (!isNodeVisible(n) || draggingRef.current === n.id) continue;
         n.vx *= 0.82; n.vy *= 0.82;
         n.x += n.vx; n.y += n.vy;
         n.x = Math.max(n.radius + 8, Math.min(W - n.radius - 8, n.x));
@@ -234,12 +272,87 @@ export default function GraphTab({
     }
 
     animRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(animRef.current);
+
+    // Touch handlers registered with { passive: false } so preventDefault works
+    function getTouchPos(e: TouchEvent, idx = 0) {
+      const r = canvas!.getBoundingClientRect();
+      const t = e.touches[idx] ?? e.changedTouches[idx];
+      return { x: t.clientX - r.left, y: t.clientY - r.top };
+    }
+    function touchDist(e: TouchEvent) {
+      const a = getTouchPos(e, 0), b = getTouchPos(e, 1);
+      return Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
+    }
+    function onTouchStart(e: TouchEvent) {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        const dist = touchDist(e);
+        const a = getTouchPos(e, 0), b = getTouchPos(e, 1);
+        pinchRef.current = { dist, scale: vpRef.current.scale, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
+        draggingRef.current = null; isPanRef.current = false;
+        return;
+      }
+      if (e.touches.length === 1) {
+        e.preventDefault();
+        const { x, y } = getTouchPos(e);
+        const hit = getNodeAtScreen(x, y);
+        if (hit) { draggingRef.current = hit.id; }
+        else { isPanRef.current = true; panStartRef.current = { mx: x, my: y, vx: vpRef.current.x, vy: vpRef.current.y }; }
+      }
+    }
+    function onTouchMove(e: TouchEvent) {
+      e.preventDefault();
+      if (e.touches.length === 2 && pinchRef.current) {
+        const dist = touchDist(e);
+        const { dist: d0, scale: s0, cx, cy } = pinchRef.current;
+        const newS = Math.max(0.2, Math.min(5, s0 * (dist / d0)));
+        const ratio = newS / vpRef.current.scale;
+        vpRef.current = { scale: newS, x: cx - (cx - vpRef.current.x) * ratio, y: cy - (cy - vpRef.current.y) * ratio };
+        return;
+      }
+      if (e.touches.length === 1) {
+        const { x, y } = getTouchPos(e);
+        if (draggingRef.current) {
+          const w = toWorld(x, y);
+          const node = nodesRef.current.find((n) => n.id === draggingRef.current);
+          if (node) { node.x = w.x; node.y = w.y; node.vx = 0; node.vy = 0; }
+          return;
+        }
+        if (isPanRef.current) {
+          const { mx, my, vx, vy } = panStartRef.current;
+          vpRef.current = { ...vpRef.current, x: vx + x - mx, y: vy + y - my };
+        }
+      }
+    }
+    function onTouchEnd(e: TouchEvent) {
+      e.preventDefault();
+      pinchRef.current = null;
+      if (draggingRef.current && e.changedTouches.length > 0) {
+        const r = canvas!.getBoundingClientRect();
+        const t = e.changedTouches[0];
+        const hit = getNodeAtScreen(t.clientX - r.left, t.clientY - r.top);
+        if (hit && hit.id === draggingRef.current) {
+          const cap = captures.find((c) => c.id === hit.id) ?? null;
+          setSelected((prev) => (prev?.id === cap?.id ? null : cap));
+        }
+      }
+      draggingRef.current = null; isPanRef.current = false;
+    }
+    canvas.addEventListener("touchstart", onTouchStart, { passive: false });
+    canvas.addEventListener("touchmove",  onTouchMove,  { passive: false });
+    canvas.addEventListener("touchend",   onTouchEnd,   { passive: false });
+
+    return () => {
+      cancelAnimationFrame(animRef.current);
+      canvas.removeEventListener("touchstart", onTouchStart);
+      canvas.removeEventListener("touchmove",  onTouchMove);
+      canvas.removeEventListener("touchend",   onTouchEnd);
+    };
   }, [captures]);
 
   function nodeColor(node: Node): string {
     return colorModeRef.current === "project"
-      ? (PROJECT_COLORS[node.project] ?? "#6b7280")
+      ? (projectColorsRef.current[node.project] ?? "#6b7280")
       : (TYPE_COLORS[node.type] ?? "#94a3b8");
   }
 
@@ -260,11 +373,11 @@ export default function GraphTab({
 
     // Cluster zones
     if (colorModeRef.current === "project") {
-      for (const [project, anchor] of Object.entries(PROJECT_ANCHORS)) {
+      for (const [project, anchor] of Object.entries(projectAnchorsRef.current)) {
         const visible = nodes.filter((n) => n.project === project && isNodeVisible(n));
         if (visible.length === 0) continue;
         const ax = anchor[0] * W, ay = anchor[1] * H;
-        const color = PROJECT_COLORS[project] ?? "#6b7280";
+        const color = projectColorsRef.current[project] ?? "#6b7280";
         const grad = ctx.createRadialGradient(ax, ay, 10, ax, ay, 90);
         grad.addColorStop(0, color + "18");
         grad.addColorStop(1, "transparent");
@@ -410,83 +523,6 @@ export default function GraphTab({
   function handleDblClick() { fitView(); }
 
   // ── Touch events ────────────────────���─────────────────────────
-  function getTouchPos(e: React.TouchEvent<HTMLCanvasElement>, idx = 0) {
-    const r = (e.target as HTMLCanvasElement).getBoundingClientRect();
-    const t = e.touches[idx] ?? e.changedTouches[idx];
-    return { x: t.clientX - r.left, y: t.clientY - r.top };
-  }
-
-  function touchDist(e: React.TouchEvent<HTMLCanvasElement>) {
-    const a = getTouchPos(e, 0), b = getTouchPos(e, 1);
-    return Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
-  }
-
-  function handleTouchStart(e: React.TouchEvent<HTMLCanvasElement>) {
-    if (e.touches.length === 2) {
-      e.preventDefault();
-      const dist = touchDist(e);
-      const a = getTouchPos(e, 0), b = getTouchPos(e, 1);
-      pinchRef.current = { dist, scale: vpRef.current.scale, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
-      draggingRef.current = null; isPanRef.current = false;
-      return;
-    }
-    if (e.touches.length === 1) {
-      e.preventDefault();
-      const { x, y } = getTouchPos(e);
-      const hit = getNodeAtScreen(x, y);
-      if (hit) {
-        draggingRef.current = hit.id;
-      } else {
-        isPanRef.current = true;
-        panStartRef.current = { mx: x, my: y, vx: vpRef.current.x, vy: vpRef.current.y };
-      }
-    }
-  }
-
-  function handleTouchMove(e: React.TouchEvent<HTMLCanvasElement>) {
-    e.preventDefault();
-    if (e.touches.length === 2 && pinchRef.current) {
-      const dist = touchDist(e);
-      const { dist: d0, scale: s0, cx, cy } = pinchRef.current;
-      const newS  = Math.max(0.2, Math.min(5, s0 * (dist / d0)));
-      const ratio = newS / vpRef.current.scale;
-      vpRef.current = {
-        scale: newS,
-        x: cx - (cx - vpRef.current.x) * ratio,
-        y: cy - (cy - vpRef.current.y) * ratio,
-      };
-      return;
-    }
-    if (e.touches.length === 1) {
-      const { x, y } = getTouchPos(e);
-      if (draggingRef.current) {
-        const w = toWorld(x, y);
-        const node = nodesRef.current.find((n) => n.id === draggingRef.current);
-        if (node) { node.x = w.x; node.y = w.y; node.vx = 0; node.vy = 0; }
-        return;
-      }
-      if (isPanRef.current) {
-        const { mx, my, vx, vy } = panStartRef.current;
-        vpRef.current = { ...vpRef.current, x: vx + x - mx, y: vy + y - my };
-      }
-    }
-  }
-
-  function handleTouchEnd(e: React.TouchEvent<HTMLCanvasElement>) {
-    e.preventDefault();
-    pinchRef.current = null;
-    if (draggingRef.current && e.changedTouches.length > 0) {
-      const r = (e.target as HTMLCanvasElement).getBoundingClientRect();
-      const t = e.changedTouches[0];
-      const sx = t.clientX - r.left, sy = t.clientY - r.top;
-      const hit = getNodeAtScreen(sx, sy);
-      if (hit && hit.id === draggingRef.current) {
-        const cap = captures.find((c) => c.id === hit.id) ?? null;
-        setSelected((prev) => (prev?.id === cap?.id ? null : cap));
-      }
-    }
-    draggingRef.current = null; isPanRef.current = false;
-  }
 
   // ── relate_all ───────────────��────────────────────────────────
   async function runBatchRelate() {
@@ -504,7 +540,7 @@ export default function GraphTab({
     }
   }
 
-  const activeColors = colorMode === "project" ? PROJECT_COLORS : TYPE_COLORS;
+  const activeColors = colorMode === "project" ? projectColorsRef.current : TYPE_COLORS;
   const visibleCount = nodesRef.current.filter(isNodeVisible).length;
   const connectedCaptures = selected ? captures.filter((c) => selected.related_ids?.includes(c.id)) : [];
 
@@ -529,8 +565,16 @@ export default function GraphTab({
         {/* Filter toggle */}
         <button onClick={() => setShowFilters((v) => !v)}
           className={`text-xs px-3 py-1 border rounded transition-colors ${showFilters ? "border-blue text-blue bg-blue/10" : "border-border text-muted hover:text-text"}`}>
-          filter{hiddenProjects.size + hiddenTypes.size > 0 ? ` (${hiddenProjects.size + hiddenTypes.size})` : ""}
+          filter{selectedProjects.size + selectedTypes.size > 0 ? ` (${selectedProjects.size + selectedTypes.size})` : ""}
         </button>
+        {(selectedProjects.size > 0 || selectedTypes.size > 0) && (
+          <button
+            onClick={() => { setSelectedProjects(new Set()); setSelectedTypes(new Set()); }}
+            className="text-xs px-3 py-1 border border-border text-muted hover:text-red-400 hover:border-red-400 rounded transition-colors"
+          >
+            reset
+          </button>
+        )}
 
         <div className="ml-auto flex gap-2">
           {/* Fit view */}
@@ -550,31 +594,47 @@ export default function GraphTab({
         <div className="bg-surface terminal-border rounded-lg p-3 space-y-2 animate-fade-in">
           <div className="flex gap-1.5 flex-wrap">
             <span className="text-xs text-muted self-center w-12">type</span>
-            {ALL_TYPES.map((t) => (
-              <button key={t} onClick={() => toggleType(t)}
-                className={`text-xs px-2 py-0.5 rounded border transition-colors ${
-                  hiddenTypes.has(t) ? "border-border text-muted opacity-40" : "border-border text-text"
-                }`}
-                style={{ borderColor: hiddenTypes.has(t) ? undefined : TYPE_COLORS[t] + "66",
-                         color: hiddenTypes.has(t) ? undefined : TYPE_COLORS[t] }}>
-                {t}
-              </button>
-            ))}
+            {ALL_TYPES.map((t) => {
+              const active = selectedTypes.has(t);
+              const anySelected = selectedTypes.size > 0;
+              const lit = active || !anySelected;
+              return (
+                <button key={t} onClick={() => toggleType(t)}
+                  className={`text-xs px-2 py-0.5 rounded border transition-colors ${lit ? "" : "opacity-30"}`}
+                  style={{ borderColor: lit ? TYPE_COLORS[t] + "66" : undefined,
+                           color: lit ? TYPE_COLORS[t] : undefined }}>
+                  {active && <span className="mr-1 text-[9px]">✓</span>}{t}
+                </button>
+              );
+            })}
           </div>
           <div className="flex gap-1.5 flex-wrap">
             <span className="text-xs text-muted self-center w-12">project</span>
-            {ALL_PROJECTS.map((p) => (
-              <button key={p} onClick={() => toggleProject(p)}
-                className={`text-xs px-2 py-0.5 rounded border transition-colors ${
-                  hiddenProjects.has(p) ? "border-border text-muted opacity-40" : "border-border text-text"
-                }`}
-                style={{ borderColor: hiddenProjects.has(p) ? undefined : PROJECT_COLORS[p] + "66",
-                         color: hiddenProjects.has(p) ? undefined : PROJECT_COLORS[p] }}>
-                {p === "Village Booker" ? "VB" : p === "Glumac Plus" ? "GP" : p}
-              </button>
-            ))}
+            {ALL_PROJECTS.map((p) => {
+              const active = selectedProjects.has(p);
+              const anySelected = selectedProjects.size > 0;
+              const lit = active || !anySelected;
+              return (
+                <button key={p} onClick={() => toggleProject(p)}
+                  className={`text-xs px-2 py-0.5 rounded border transition-colors ${lit ? "" : "opacity-30"}`}
+                  style={{ borderColor: lit ? projectColorsRef.current[p] + "66" : undefined,
+                           color: lit ? projectColorsRef.current[p] : undefined }}>
+                  {active && <span className="mr-1 text-[9px]">✓</span>}{abbrev(p)}
+                </button>
+              );
+            })}
           </div>
-          <p className="text-xs text-muted">klik na tag da sakriješ · dbl-click na canvas = fit view</p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted">klik = filtriraj · dbl-click na canvas = fit view</p>
+            {(selectedProjects.size > 0 || selectedTypes.size > 0) && (
+              <button
+                onClick={() => { setSelectedProjects(new Set()); setSelectedTypes(new Set()); }}
+                className="text-[10px] text-muted hover:text-red-400 border border-border hover:border-red-400 rounded px-2 py-0.5 transition-colors"
+              >
+                reset
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -602,16 +662,13 @@ export default function GraphTab({
               onMouseLeave={handleMouseLeave}
               onWheel={handleWheel}
               onDoubleClick={handleDblClick}
-              onTouchStart={handleTouchStart}
-              onTouchMove={handleTouchMove}
-              onTouchEnd={handleTouchEnd}
             />
             {/* Legend overlay */}
             <div className="absolute bottom-3 left-3 flex flex-col gap-1 pointer-events-none">
               {Object.entries(activeColors).map(([label, color]) => (
                 <span key={label} className="flex items-center gap-1 text-xs" style={{ color }}>
                   <span>●</span>
-                  <span className="opacity-70 text-[10px]">{label === "Village Booker" ? "VB" : label === "Glumac Plus" ? "GP" : label}</span>
+                  <span className="opacity-70 text-[10px]">{abbrev(label)}</span>
                 </span>
               ))}
             </div>
@@ -629,7 +686,7 @@ export default function GraphTab({
           <div className="flex items-start justify-between mb-3">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-bold" style={{ color: PROJECT_COLORS[selected.project] ?? "#6b7280" }}>
+                <span className="text-xs font-bold" style={{ color: projectColorsRef.current[selected.project] ?? "#6b7280" }}>
                   {selected.project}
                 </span>
                 <span className="text-muted text-xs">·</span>
@@ -649,7 +706,7 @@ export default function GraphTab({
                 {connectedCaptures.map((c) => (
                   <button key={c.id} onClick={() => setSelected(c)}
                     className="text-left text-xs text-muted hover:text-text py-1 px-2 rounded hover:bg-border flex items-center gap-2 transition-colors">
-                    <span style={{ color: PROJECT_COLORS[c.project] ?? "#6b7280" }}>●</span>
+                    <span style={{ color: projectColorsRef.current[c.project] ?? "#6b7280" }}>●</span>
                     <span className="truncate">{c.title}</span>
                   </button>
                 ))}

@@ -1,8 +1,14 @@
 "use client";
 
 import { useState, useRef, useCallback, useMemo } from "react";
-import type { Capture } from "./BrainClient";
+import type { Capture, Project } from "./BrainClient";
 import { TYPE_COLORS } from "./BrainClient";
+
+function abbrev(name: string): string {
+  const words = name.trim().split(/\s+/);
+  if (words.length === 1) return name.slice(0, 3);
+  return words.map((w) => w[0]).join("").toUpperCase().slice(0, 3);
+}
 
 const TEMPLATES: { label: string; prefix: string; type: string }[] = [
   { label: "task",     prefix: "[ ] ",    type: "Task"     },
@@ -12,24 +18,19 @@ const TEMPLATES: { label: string; prefix: string; type: string }[] = [
   { label: "note",     prefix: "",         type: "Note"     },
 ];
 
-const PROJECT_COLORS: Record<string, string> = {
-  "Village Booker": "text-amber",
-  "Glumac Plus": "text-purple",
-  FON: "text-blue",
-  Personal: "text-green",
-  Other: "text-muted",
-};
-
 const TYPES = ["All", "Idea", "Link", "Task", "Learning", "Note"];
-const PROJECTS = ["All", "Village Booker", "Glumac Plus", "FON", "Personal", "Other"];
 type SortKey = "newest" | "oldest" | "connections";
 
 export default function CaptureTab({
   captures,
   setCaptures,
+  projects,
+  onProjectCreated,
 }: {
   captures: Capture[];
   setCaptures: React.Dispatch<React.SetStateAction<Capture[]>>;
+  projects: Project[];
+  onProjectCreated: (name: string) => Promise<Project>;
 }) {
   const [text, setText] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -320,7 +321,7 @@ export default function CaptureTab({
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex gap-3 text-muted">
               <span>type: <span className={TYPE_COLORS[lastSaved.type] ?? "text-muted"}>{lastSaved.type}</span></span>
-              <span>project: <span className={PROJECT_COLORS[lastSaved.project] ?? "text-muted"}>{lastSaved.project}</span></span>
+              <span>project: <span style={{ color: projects.find((p) => p.name === lastSaved.project)?.color ?? "#6b7280" }}>{lastSaved.project}</span></span>
             </div>
             {relateStatus && (
               <span className={`text-xs ${relateStatus.startsWith("→") ? "text-purple" : "text-muted animate-pulse"}`}>
@@ -363,19 +364,27 @@ export default function CaptureTab({
         {/* Project filter + sort */}
         <div className="flex items-center gap-2">
           <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar flex-1">
-            {PROJECTS.map((p) => (
-              <button
-                key={p}
-                onClick={() => setFilterProject(p)}
-                className={`shrink-0 text-xs px-2.5 py-1 rounded border transition-colors ${
-                  filterProject === p
-                    ? "border-purple text-purple bg-purple/10"
-                    : "border-border text-muted hover:text-text"
-                }`}
-              >
-                {p === "Village Booker" ? "VB" : p === "Glumac Plus" ? "GP" : p}
-              </button>
-            ))}
+            {["All", ...projects.map((p) => p.name)].map((name) => {
+              const proj = projects.find((p) => p.name === name);
+              const active = filterProject === name;
+              return (
+                <button
+                  key={name}
+                  onClick={() => setFilterProject(name)}
+                  className={`shrink-0 text-xs px-2.5 py-1 rounded border transition-colors ${
+                    active ? "bg-surface" : "border-border text-muted hover:text-text"
+                  }`}
+                  style={active && proj ? {
+                    borderColor: proj.color,
+                    color: proj.color,
+                    backgroundColor: proj.color + "1a",
+                  } : active ? { borderColor: "#a78bfa", color: "#a78bfa", backgroundColor: "#a78bfa1a" } : {}}
+                >
+                  {name === "All" ? "All" : abbrev(name)}
+                </button>
+              );
+            })}
+            <NewProjectButton onCreated={(p) => { onProjectCreated(p); }} />
           </div>
           <select
             value={sort}
@@ -415,6 +424,8 @@ export default function CaptureTab({
             <CaptureCard
               key={capture.id}
               capture={capture}
+              projects={projects}
+              onProjectCreated={onProjectCreated}
               onUpdate={(updated) =>
                 setCaptures((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
               }
@@ -437,11 +448,15 @@ export default function CaptureTab({
 
 function CaptureCard({
   capture,
+  projects,
+  onProjectCreated,
   onUpdate,
   onDelete,
   onStar,
 }: {
   capture: Capture;
+  projects: Project[];
+  onProjectCreated: (name: string) => Promise<Project>;
   onUpdate: (c: Capture) => void;
   onDelete: (id: string) => void;
   onStar: (id: string, starred: boolean) => void;
@@ -452,6 +467,8 @@ function CaptureCard({
   const [editTitle, setEditTitle] = useState(capture.title);
   const [editType, setEditType] = useState(capture.type);
   const [editProject, setEditProject] = useState(capture.project);
+  const [addingProject, setAddingProject] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
   const [saving, setSaving] = useState(false);
 
   const date = new Date(capture.created_at).toLocaleDateString("sr", {
@@ -518,7 +535,7 @@ function CaptureCard({
                 body: JSON.stringify({ starred: next }),
               });
             }}
-            className={`text-sm leading-none transition-colors ${capture.starred ? "text-amber" : "text-muted hover:text-amber"}`}
+            className={`text-lg leading-none transition-colors ${capture.starred ? "text-amber" : "text-muted hover:text-amber"}`}
           >
             {capture.starred ? "★" : "☆"}
           </button>
@@ -552,7 +569,7 @@ function CaptureCard({
           <div className="flex items-center justify-between px-4 py-3 border-t border-border">
             <div className="flex gap-3 text-xs text-muted">
               <span className={TYPE_COLORS[capture.type] ?? "text-muted"}>{capture.type}</span>
-              <span>{capture.project}</span>
+              <span style={{ color: projects.find((p) => p.name === capture.project)?.color ?? "#6b7280" }}>{capture.project}</span>
               {capture.related_ids?.length > 0 && (
                 <span className="text-purple">{capture.related_ids.length} links</span>
               )}
@@ -599,15 +616,48 @@ function CaptureCard({
                 <option key={t} value={t}>{t}</option>
               ))}
             </select>
-            <select
-              value={editProject}
-              onChange={(e) => setEditProject(e.target.value)}
-              className="text-xs bg-bg border border-border text-muted rounded px-2 py-1.5 focus:outline-none flex-1"
-            >
-              {["Village Booker", "Glumac Plus", "FON", "Personal", "Other"].map((p) => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
+            {addingProject ? (
+              <input
+                autoFocus
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                onKeyDown={async (e) => {
+                  if (e.key === "Enter" && newProjectName.trim()) {
+                    const proj = await onProjectCreated(newProjectName.trim());
+                    setEditProject(proj.name);
+                    setAddingProject(false);
+                    setNewProjectName("");
+                  } else if (e.key === "Escape") {
+                    setAddingProject(false);
+                    setNewProjectName("");
+                  }
+                }}
+                onBlur={async () => {
+                  if (newProjectName.trim()) {
+                    const proj = await onProjectCreated(newProjectName.trim());
+                    setEditProject(proj.name);
+                  }
+                  setAddingProject(false);
+                  setNewProjectName("");
+                }}
+                className="text-xs bg-bg border border-amber rounded px-2 py-1.5 focus:outline-none flex-1 text-text font-mono"
+                placeholder="new project name..."
+              />
+            ) : (
+              <select
+                value={editProject}
+                onChange={(e) => {
+                  if (e.target.value === "__new__") setAddingProject(true);
+                  else setEditProject(e.target.value);
+                }}
+                className="text-xs bg-bg border border-border text-muted rounded px-2 py-1.5 focus:outline-none flex-1"
+              >
+                {projects.map((p) => (
+                  <option key={p.id} value={p.name}>{p.name}</option>
+                ))}
+                <option value="__new__">+ new project...</option>
+              </select>
+            )}
           </div>
           <div className="flex gap-2 justify-end">
             <button
@@ -649,5 +699,44 @@ function CaptureCard({
         </div>
       )}
     </div>
+  );
+}
+
+function NewProjectButton({ onCreated }: { onCreated: (name: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function submit() {
+    if (value.trim()) { onCreated(value.trim()); }
+    setValue("");
+    setOpen(false);
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 0); }}
+        className="shrink-0 text-xs px-2.5 py-1 rounded border border-dashed border-border text-muted hover:text-text hover:border-text transition-colors"
+        title="Add project"
+      >
+        +
+      </button>
+    );
+  }
+
+  return (
+    <input
+      ref={inputRef}
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") submit();
+        if (e.key === "Escape") { setValue(""); setOpen(false); }
+      }}
+      onBlur={submit}
+      className="shrink-0 text-xs px-2.5 py-1 rounded border border-amber text-text bg-bg focus:outline-none w-28 font-mono"
+      placeholder="project name"
+    />
   );
 }
