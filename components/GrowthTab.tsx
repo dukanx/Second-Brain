@@ -588,6 +588,7 @@ function TaskRow({
   completing,
   onComplete,
   onTextUpdate,
+  initialExpanded,
 }: {
   task: Capture;
   completing: boolean;
