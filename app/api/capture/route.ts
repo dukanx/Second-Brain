@@ -1,11 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
-import Groq from "groq-sdk";
 import { NextResponse } from "next/server";
 import { YoutubeTranscript } from "youtube-transcript";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 function isUrl(text: string) {
   try { new URL(text.trim()); return text.trim().startsWith("http"); }
@@ -52,82 +50,6 @@ async function fetchYouTubeTranscript(url: string): Promise<{ title: string; tra
   } catch { return null; }
 }
 
-function isSocialVideo(url: string): boolean {
-  try {
-    const u = new URL(url.trim());
-    return (
-      u.hostname.includes("instagram.com") ||
-      u.hostname.includes("tiktok.com") ||
-      u.hostname === "vm.tiktok.com"
-    );
-  } catch { return false; }
-}
-
-function cleanSocialUrl(url: string): string {
-  try {
-    const u = new URL(url.trim());
-    // Keep only the path for Instagram/TikTok, strip all tracking params
-    if (u.hostname.includes("instagram.com")) {
-      return `https://www.instagram.com${u.pathname}`;
-    }
-    if (u.hostname.includes("tiktok.com") || u.hostname === "vm.tiktok.com") {
-      return `https://www.tiktok.com${u.pathname}`;
-    }
-    return url;
-  } catch { return url; }
-}
-
-async function fetchSocialTranscript(url: string): Promise<{ title: string; transcript: string } | null> {
-  const cleanUrl = cleanSocialUrl(url);
-  try {
-    // Step 1: Ask Cobalt for audio download URL
-    const cobaltRes = await fetch("https://api.cobalt.tools/", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify({ url: cleanUrl, downloadMode: "audio" }),
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!cobaltRes.ok) {
-      console.error("[cobalt] HTTP error:", cobaltRes.status, await cobaltRes.text());
-      return null;
-    }
-    const cobalt = await cobaltRes.json();
-    console.log("[cobalt] response status:", cobalt.status, "url:", !!cobalt.url);
-    const audioUrl = cobalt.url as string | undefined;
-    if (!audioUrl) return null;
-    // Accept tunnel, redirect, or stream
-    if (!["tunnel", "redirect", "stream"].includes(cobalt.status)) return null;
-
-    // Step 2: Download audio + fetch OG metadata in parallel
-    const [audioRes, metaRes] = await Promise.allSettled([
-      fetch(audioUrl, { signal: AbortSignal.timeout(30000) }),
-      fetch(url, {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; SecondBrain/1.0)" },
-        signal: AbortSignal.timeout(5000),
-      }),
-    ]);
-
-    if (audioRes.status === "rejected" || !audioRes.value.ok) return null;
-
-    let title = "";
-    if (metaRes.status === "fulfilled") {
-      const html = await metaRes.value.text();
-      const ogTitle = html.match(/<meta[^>]*property="og:title"[^>]*content="([^"]+)"/i)?.[1];
-      title = (ogTitle || "").slice(0, 120).trim();
-    }
-
-    // Step 3: Transcribe via Groq Whisper
-    const buffer = await audioRes.value.arrayBuffer();
-    const file = new File([buffer], "audio.mp3", { type: "audio/mpeg" });
-    const transcription = await groq.audio.transcriptions.create({
-      file,
-      model: "whisper-large-v3",
-      response_format: "text",
-    });
-
-    return { title, transcript: transcription as unknown as string };
-  } catch { return null; }
-}
 
 async function enrichUrl(url: string): Promise<{ text: string; fullText?: string }> {
   const ytResult = await fetchYouTubeTranscript(url);
@@ -137,15 +59,6 @@ async function enrichUrl(url: string): Promise<{ text: string; fullText?: string
     const aiText = `YouTube Video: ${ytResult.title}\nURL: ${url}\n\nTranscript excerpt:\n${preview}`;
     const fullText = `YouTube Video: ${ytResult.title}\nURL: ${url}\n\nFull Transcript:\n${ytResult.transcript}`;
     return { text: aiText, fullText };
-  }
-
-  if (isSocialVideo(url)) {
-    const social = await fetchSocialTranscript(url);
-    if (social) {
-      const header = social.title ? `${social.title}\nURL: ${url}` : `URL: ${url}`;
-      const fullText = `${header}\n\nTranscript:\n${social.transcript}`;
-      return { text: fullText.slice(0, 1200), fullText };
-    }
   }
 
   try {

@@ -235,9 +235,7 @@ export default function CaptureTab({
             <span className="text-blue text-xs ml-1">
               {text.trim().includes("youtube.com") || text.trim().includes("youtu.be")
                 ? "// youtube — fetching transcript"
-                : text.trim().includes("instagram.com") || text.trim().includes("tiktok.com")
-                ? "// reel — cobalt → whisper transkripcija"
-                : "// url — AI fetch metadata"}
+                : "// url — AI will fetch metadata"}
             </span>
           )}
           <span className="text-muted text-xs ml-auto hidden sm:inline">ctrl+enter to save</span>
