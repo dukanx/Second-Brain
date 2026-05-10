@@ -19,8 +19,13 @@ export async function POST(request: Request) {
     pinnedCapture?: ContextCapture | null;
   };
 
+  const pinnedText = pinnedCapture
+    ? pinnedCapture.text.length > 2000
+      ? pinnedCapture.text.slice(0, 2000) + "\n\n[... transcript truncated — ask about specific parts if needed]"
+      : pinnedCapture.text
+    : "";
   const pinnedBlock = pinnedCapture
-    ? `The user is currently reviewing this specific capture. When they say "this", "it", or ask about the topic without specifying, they mean THIS capture:\n\n[${pinnedCapture.type}][${pinnedCapture.project}] ${pinnedCapture.title}\n${pinnedCapture.text}\n\n`
+    ? `The user is currently reviewing this specific capture. When they say "this", "it", or ask about the topic without specifying, they mean THIS capture:\n\n[${pinnedCapture.type}][${pinnedCapture.project}] ${pinnedCapture.title}\n${pinnedText}\n\n`
     : "";
 
   const contextBlock = context.length > 0

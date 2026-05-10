@@ -26,11 +26,13 @@ export default function CaptureTab({
   setCaptures,
   projects,
   onProjectCreated,
+  onChatAbout,
 }: {
   captures: Capture[];
   setCaptures: React.Dispatch<React.SetStateAction<Capture[]>>;
   projects: Project[];
   onProjectCreated: (name: string) => Promise<Project>;
+  onChatAbout: (id: string) => void;
 }) {
   const [text, setText] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -40,8 +42,11 @@ export default function CaptureTab({
   const [relateStatus, setRelateStatus] = useState("");
   const [error, setError] = useState("");
   const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [sourceUrl, setSourceUrl] = useState("");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
 
   // Filters
   const [filterType, setFilterType] = useState("All");
@@ -60,7 +65,7 @@ export default function CaptureTab({
       const res = await fetch("/api/capture", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: text.trim(), due_date: dueDate || undefined, priority: isTaskMode ? priority : undefined }),
+        body: JSON.stringify({ text: text.trim(), due_date: dueDate || undefined, priority: isTaskMode ? priority : undefined, source_url: sourceUrl || undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to save");
@@ -70,6 +75,7 @@ export default function CaptureTab({
       setText("");
       setDueDate("");
       setPriority("medium");
+      setSourceUrl("");
       textareaRef.current?.focus();
 
       // Relate in background, show feedback
@@ -154,6 +160,32 @@ export default function CaptureTab({
     setRecording(true);
   }
 
+  async function uploadAudio(file: File) {
+    setTranscribing(true);
+    setError("");
+    // If textarea has a URL, save it as source and clear for transcript
+    const currentText = text.trim();
+    let urlToLink = sourceUrl;
+    if (currentText.startsWith("http") && !currentText.includes("\n")) {
+      try { new URL(currentText); urlToLink = currentText; setText(""); } catch { /* not a clean URL */ }
+    }
+    setSourceUrl(urlToLink);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/transcribe", { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Transcription failed");
+      setText((prev) => (prev ? prev + "\n\n" + data.transcript : data.transcript));
+      textareaRef.current?.focus();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Transcription failed");
+    } finally {
+      setTranscribing(false);
+      if (audioInputRef.current) audioInputRef.current.value = "";
+    }
+  }
+
   const filtered = useMemo(() => {
     let list = [...captures];
     if (filterStarred) list = list.filter((c) => c.starred);
@@ -199,7 +231,15 @@ export default function CaptureTab({
       <div className="bg-surface terminal-border rounded-lg overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-2 border-b border-border">
           <span className="text-amber text-xs">capture</span>
-          {isUrl && <span className="text-blue text-xs ml-1">// url detected — AI will fetch metadata</span>}
+          {isUrl && (
+            <span className="text-blue text-xs ml-1">
+              {text.trim().includes("youtube.com") || text.trim().includes("youtu.be")
+                ? "// youtube — fetching transcript"
+                : text.trim().includes("instagram.com") || text.trim().includes("tiktok.com")
+                ? "// reel — cobalt → whisper transkripcija"
+                : "// url — AI fetch metadata"}
+            </span>
+          )}
           <span className="text-muted text-xs ml-auto hidden sm:inline">ctrl+enter to save</span>
         </div>
         <div className="flex gap-1.5 px-4 pt-2 flex-wrap">
@@ -222,11 +262,21 @@ export default function CaptureTab({
             e.target.style.height = `${e.target.scrollHeight}px`;
           }}
           onKeyDown={handleKeyDown}
-          placeholder="// what's on your mind?"
+          placeholder={transcribing ? "// transcribing audio..." : "// what's on your mind?"}
           className="w-full bg-transparent text-text placeholder-muted text-sm p-4 resize-none focus:outline-none min-h-[120px] sm:min-h-[140px] font-mono leading-relaxed"
           autoFocus
-          disabled={saving}
+          disabled={saving || transcribing}
         />
+        {sourceUrl && (
+          <div className="px-4 py-2 border-t border-border flex items-center gap-2">
+            <span className="text-[10px] text-muted">// source:</span>
+            <span className="text-[10px] text-blue truncate flex-1">{sourceUrl}</span>
+            <button
+              onClick={() => setSourceUrl("")}
+              className="text-muted hover:text-red-400 text-sm transition-colors shrink-0"
+            >×</button>
+          </div>
+        )}
         {isTaskMode && (
           <div className="px-4 py-2 border-t border-border space-y-2">
             <div className="flex gap-1.5">
@@ -284,6 +334,32 @@ export default function CaptureTab({
                 </svg>
               )}
             </button>
+            <button
+              onClick={() => audioInputRef.current?.click()}
+              disabled={transcribing || saving}
+              title="upload audio for transcription"
+              className={`text-sm leading-none transition-colors ${transcribing ? "text-purple animate-pulse" : "text-muted hover:text-purple"}`}
+            >
+              {transcribing ? (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+              ) : (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+              )}
+            </button>
+            <input
+              ref={audioInputRef}
+              type="file"
+              accept="audio/mpeg,audio/mp4,audio/wav,audio/x-wav,audio/m4a,audio/x-m4a,.mp3,.m4a,.wav"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) uploadAudio(file);
+              }}
+            />
           </div>
           <div className="flex items-center gap-2">
             {isTaskMode && (
@@ -435,6 +511,7 @@ export default function CaptureTab({
               onStar={(id, starred) =>
                 setCaptures((prev) => prev.map((c) => (c.id === id ? { ...c, starred } : c)))
               }
+              onChatAbout={onChatAbout}
             />
           ))}
           {filtered.length === 0 && (
@@ -453,6 +530,7 @@ function CaptureCard({
   onUpdate,
   onDelete,
   onStar,
+  onChatAbout,
 }: {
   capture: Capture;
   projects: Project[];
@@ -460,6 +538,7 @@ function CaptureCard({
   onUpdate: (c: Capture) => void;
   onDelete: (id: string) => void;
   onStar: (id: string, starred: boolean) => void;
+  onChatAbout: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [mode, setMode] = useState<"view" | "edit" | "confirmDelete">("view");
@@ -575,6 +654,12 @@ function CaptureCard({
               )}
             </div>
             <div className="flex gap-2">
+              <button
+                onClick={() => onChatAbout(capture.id)}
+                className="text-xs text-muted hover:text-purple transition-colors px-2 py-0.5 border border-border rounded hover:border-purple"
+              >
+                ◇ chat
+              </button>
               <button
                 onClick={startEdit}
                 className="text-xs text-muted hover:text-blue transition-colors px-2 py-0.5 border border-border rounded hover:border-blue"

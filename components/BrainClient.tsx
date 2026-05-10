@@ -242,7 +242,6 @@ export default function BrainClient({
       <header className="bg-surface border-b border-border px-4 py-3 flex items-center justify-between sticky top-0 z-20">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <span className="text-amber">▣</span>
             <span className="text-amber font-bold text-sm tracking-tight">second_brain</span>
           </div>
           {/* Desktop tabs */}
@@ -305,7 +304,7 @@ export default function BrainClient({
 
       {/* Main */}
       <main className="flex-1 container mx-auto max-w-5xl px-4 py-5 pb-24 sm:pb-6">
-        {tab === "capture" && <CaptureTab captures={captures} setCaptures={setCaptures} projects={projects} onProjectCreated={handleProjectCreated} />}
+        {tab === "capture" && <CaptureTab captures={captures} setCaptures={setCaptures} projects={projects} onProjectCreated={handleProjectCreated} onChatAbout={(id) => { setReviewId(id); setTab("chat"); }} />}
         {tab === "search"  && <SearchTab  captures={captures} />}
         {tab === "graph"   && <GraphTab   captures={captures} projects={projects} onRelatesUpdated={refreshCaptures} />}
         {tab === "digest"  && <DigestTab  captures={captures} userId={user.id} />}
