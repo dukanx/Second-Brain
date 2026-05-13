@@ -9,6 +9,7 @@ A personal AI-powered knowledge capture and synthesis tool. Built for daily use 
 - **Next.js 15** App Router (server components + API routes)
 - **Supabase** — Postgres database + Google OAuth
 - **Anthropic API** — `claude-sonnet-4-6` for all AI features
+- **Groq** — `whisper-large-v3` for audio transcription
 - **Tailwind CSS** — terminal aesthetic (JetBrains Mono, dark theme)
 - **Vercel** — hosting + cron jobs
 
@@ -16,9 +17,11 @@ A personal AI-powered knowledge capture and synthesis tool. Built for daily use 
 
 ### Capture
 - AI auto-categorizes every capture (type, project, title)
-- URL detection — fetches og:title and meta description automatically
-- Voice capture via Web Speech API
+- URL detection — fetches og:title/description; YouTube URLs extract full transcript
+- Voice capture via Web Speech API (continuous, live)
+- Audio file upload — transcribed via Groq Whisper, merged with typed text
 - Quick templates: task / idea / TIL / link / note
+- Tasks support due dates and priority (high / medium / low)
 - Star (favorite) captures, edit, delete
 
 ### Search & Discovery
@@ -38,6 +41,14 @@ A personal AI-powered knowledge capture and synthesis tool. Built for daily use 
 - AI analysis of last 80 captures: themes, patterns, pending tasks, forgotten ideas, next action
 - Stored in Supabase — synced across all devices
 - Full history, always shows last generated until you regenerate
+
+### Architecture
+- Visual system explorer — visible in header on desktop and mobile landscape
+- **System Overview** — layered diagram (Frontend → API → AI → Database) with animated data flow; click any node to inspect it
+- **Data Flows** — step-by-step animated breakdown of Save Capture, Chat, Search, and Batch Relate flows
+- **Dependency Map** — structured 4-column node graph showing how files connect; click to highlight connections
+- **File Tree** — browsable file tree with exports, imports, and used-by for each file
+- **AI Pipeline** — full prompt/response breakdown for every Claude and Groq operation
 
 ### PWA
 - Installable on iOS and Android (Add to Home Screen)
@@ -65,6 +76,8 @@ create table captures (
   related_ids uuid[] default '{}',
   starred boolean not null default false,
   last_reviewed_at timestamptz,
+  due_date date,
+  priority text default 'medium',
   created_at timestamptz default now()
 );
 
@@ -114,16 +127,20 @@ CRON_SECRET=
 
 | Route | Method | Description |
 |---|---|---|
-| `/api/capture` | POST | Save capture, AI categorize |
-| `/api/capture/[id]` | PUT / PATCH / DELETE | Edit, star, delete |
-| `/api/relate` | POST | Find connections for one capture |
-| `/api/relate/batch` | POST | Batch relate all captures |
-| `/api/search` | POST | AI search synthesis |
-| `/api/chat` | POST | RAG chat (top 8 captures + history) |
+| `/api/capture` | POST | Save capture, AI categorize, trigger relate |
+| `/api/capture/[id]` | PATCH / DELETE | Edit fields, delete |
+| `/api/relate` | POST | Find semantic connections for one capture |
+| `/api/relate/batch` | POST | Batch relate selected captures (Graph tab) |
+| `/api/search` | POST | AI search synthesis across all captures |
+| `/api/chat` | POST | RAG chat (keyword-ranked context + history) |
+| `/api/transcribe` | POST | Audio file → Groq Whisper → transcript |
+| `/api/projects` | GET / POST | List projects / create new project |
 | `/api/digest` | GET / POST | Fetch history / generate digest |
 | `/api/summary/weekly` | GET / POST | Fetch weekly summaries / generate |
-| `/api/push/subscribe` | POST / DELETE | Save / remove push subscription |
-| `/api/cron/review-reminder` | GET | Daily cron: review + weekly recap push |
+| `/api/push/subscribe` | POST | Save push subscription (VAPID) |
+| `/api/cron/review-reminder` | GET | Daily cron: push for spaced repetition reviews |
+| `/api/cron/task-due` | GET | Daily cron: push for tasks due today |
+| `/api/auth/callback` | GET | Google OAuth callback |
 
 
 ## Token Usage (approximate)
