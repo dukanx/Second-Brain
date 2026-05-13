@@ -9,6 +9,7 @@ import GraphTab from "./GraphTab";
 import DigestTab from "./DigestTab";
 import GrowthTab from "./GrowthTab";
 import ChatTab from "./ChatTab";
+import ArchitectureTab from "./ArchitectureTab";
 import SearchOverlay from "./SearchOverlay";
 import type { User } from "@supabase/supabase-js";
 
@@ -34,7 +35,7 @@ export type Project = {
   color: string;
 };
 
-type Tab = "capture" | "search" | "graph" | "digest" | "grow" | "chat";
+type Tab = "capture" | "search" | "graph" | "digest" | "grow" | "chat" | "arch";
 
 const TYPE_COLORS: Record<string, string> = {
   Idea: "text-amber",
@@ -46,13 +47,14 @@ const TYPE_COLORS: Record<string, string> = {
 
 export { TYPE_COLORS };
 
-const TABS: { id: Tab; label: string; icon: string; activeColor: string }[] = [
+const TABS: { id: Tab; label: string; icon: string; activeColor: string; desktopOnly?: boolean }[] = [
   { id: "capture", label: "capture", icon: "✦", activeColor: "text-amber"  },
   { id: "search",  label: "search",  icon: "⌕", activeColor: "text-blue"   },
   { id: "graph",   label: "graph",   icon: "◉", activeColor: "text-green"  },
   { id: "digest",  label: "digest",  icon: "◈", activeColor: "text-purple" },
   { id: "grow",    label: "grow",    icon: "✺", activeColor: "text-green"  },
   { id: "chat",    label: "chat",    icon: "◇", activeColor: "text-purple" },
+  { id: "arch",    label: "arch",    icon: "⬡", activeColor: "text-muted", desktopOnly: true },
 ];
 
 export default function BrainClient({
@@ -310,11 +312,12 @@ export default function BrainClient({
         {tab === "digest"  && <DigestTab  captures={captures} userId={user.id} />}
         {tab === "grow"    && <GrowthTab  captures={captures} setCaptures={setCaptures} taskId={taskId} />}
         {tab === "chat"    && <ChatTab    captures={captures} pinnedCapture={reviewId ? captures.find((c) => c.id === reviewId) ?? null : null} onMarkReviewed={markReviewed} />}
+        {tab === "arch"    && <ArchitectureTab />}
       </main>
 
-      {/* Mobile bottom nav */}
+      {/* Mobile bottom nav — desktop-only tabs excluded */}
       <nav className="sm:hidden fixed bottom-0 left-0 right-0 z-20 bg-surface border-t border-border flex">
-        {TABS.map((t) => (
+        {TABS.filter((t) => !t.desktopOnly).map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
