@@ -239,7 +239,7 @@ export default function BrainClient({
 
   return (
     <div className="min-h-screen bg-bg flex flex-col">
-      {searchOpen && <SearchOverlay captures={captures} projects={projects} onClose={() => setSearchOpen(false)} />}
+      {searchOpen && <SearchOverlay captures={captures} projects={projects} setCaptures={setCaptures} onClose={() => setSearchOpen(false)} />}
       {/* Header */}
       <header className="bg-surface border-b border-border px-4 py-3 flex items-center justify-between sticky top-0 z-20">
         <div className="flex items-center gap-3">
@@ -307,8 +307,8 @@ export default function BrainClient({
       {/* Main */}
       <main className="flex-1 container mx-auto max-w-5xl px-4 py-5 pb-24 sm:pb-6">
         {tab === "capture" && <CaptureTab captures={captures} setCaptures={setCaptures} projects={projects} onProjectCreated={handleProjectCreated} onChatAbout={(id) => { setReviewId(id); setTab("chat"); }} />}
-        {tab === "search"  && <SearchTab  captures={captures} />}
-        {tab === "graph"   && <GraphTab   captures={captures} projects={projects} onRelatesUpdated={refreshCaptures} />}
+        {tab === "search"  && <SearchTab  captures={captures} setCaptures={setCaptures} projects={projects} />}
+        {tab === "graph"   && <GraphTab   captures={captures} projects={projects} setCaptures={setCaptures} onRelatesUpdated={refreshCaptures} />}
         {tab === "digest"  && <DigestTab  captures={captures} userId={user.id} />}
         {tab === "grow"    && <GrowthTab  captures={captures} setCaptures={setCaptures} taskId={taskId} />}
         {tab === "chat"    && <ChatTab    captures={captures} pinnedCapture={reviewId ? captures.find((c) => c.id === reviewId) ?? null : null} onMarkReviewed={markReviewed} />}

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useRef } from "react";
-import type { Capture } from "./BrainClient";
+import type { Capture, Project } from "./BrainClient";
 import { TYPE_COLORS } from "./BrainClient";
+import CaptureDetailModal from "./CaptureDetailModal";
 
 type SearchResult = {
   synthesis: string;
@@ -10,11 +11,20 @@ type SearchResult = {
   followUpQuestions: string[];
 };
 
-export default function SearchTab({ captures }: { captures: Capture[] }) {
+export default function SearchTab({
+  captures,
+  setCaptures,
+  projects,
+}: {
+  captures: Capture[];
+  setCaptures: React.Dispatch<React.SetStateAction<Capture[]>>;
+  projects: Project[];
+}) {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SearchResult | null>(null);
   const [error, setError] = useState("");
+  const [modalCapture, setModalCapture] = useState<Capture | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function search(q?: string) {
@@ -41,6 +51,21 @@ export default function SearchTab({ captures }: { captures: Capture[] }) {
 
   return (
     <div className="space-y-5 animate-fade-in">
+      {modalCapture && (
+        <CaptureDetailModal
+          capture={modalCapture}
+          projects={projects}
+          onUpdate={(updated) => {
+            setCaptures((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+            setModalCapture(updated);
+          }}
+          onDelete={(id) => {
+            setCaptures((prev) => prev.filter((c) => c.id !== id));
+            setModalCapture(null);
+          }}
+          onClose={() => setModalCapture(null)}
+        />
+      )}
       {/* Search input */}
       <div className="bg-surface terminal-border rounded-lg overflow-hidden">
         <div className="flex items-center px-4 py-3 gap-3">
@@ -107,7 +132,11 @@ export default function SearchTab({ captures }: { captures: Capture[] }) {
               </p>
               <div className="space-y-2">
                 {result.relevantCaptures.map((capture) => (
-                  <div key={capture.id} className="bg-surface terminal-border rounded px-4 py-3">
+                  <div
+                    key={capture.id}
+                    className="bg-surface terminal-border rounded px-4 py-3 cursor-pointer hover:border-text/30 transition-colors"
+                    onClick={() => setModalCapture(capture)}
+                  >
                     <div className="flex items-start gap-2 mb-1 flex-wrap">
                       <span className={`text-xs shrink-0 ${TYPE_COLORS[capture.type] ?? "text-muted"}`}>
                         [{capture.type}]

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useMemo } from "react";
 import type { Capture, Project } from "./BrainClient";
+import CaptureDetailModal from "./CaptureDetailModal";
 
 type Node = {
   id: string;
@@ -55,10 +56,12 @@ function computeAnchors(names: string[]): Record<string, [number, number]> {
 export default function GraphTab({
   captures,
   projects,
+  setCaptures,
   onRelatesUpdated,
 }: {
   captures: Capture[];
   projects: Project[];
+  setCaptures: React.Dispatch<React.SetStateAction<Capture[]>>;
   onRelatesUpdated?: () => void;
 }) {
   const canvasRef   = useRef<HTMLCanvasElement>(null);
@@ -77,6 +80,7 @@ export default function GraphTab({
 
   const [hoveredId, setHoveredId]   = useState<string | null>(null);
   const [selected, setSelected]     = useState<Capture | null>(null);
+  const [modalCapture, setModalCapture] = useState<Capture | null>(null);
   const [colorMode, setColorMode]   = useState<ColorMode>("project");
   const colorModeRef = useRef<ColorMode>("project");
   colorModeRef.current = colorMode;
@@ -696,7 +700,15 @@ export default function GraphTab({
               </div>
               <p className="text-sm text-text font-bold">{selected.title}</p>
             </div>
-            <button onClick={() => setSelected(null)} className="text-muted hover:text-text text-xs">✕</button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setModalCapture(selected)}
+                className="text-xs text-muted hover:text-blue border border-border rounded px-2 py-0.5 hover:border-blue transition-colors"
+              >
+                edit
+              </button>
+              <button onClick={() => setSelected(null)} className="text-muted hover:text-text text-xs">✕</button>
+            </div>
           </div>
           <p className="text-xs text-muted leading-relaxed mb-3 whitespace-pre-wrap">{selected.text}</p>
           {connectedCaptures.length > 0 && (
@@ -714,6 +726,24 @@ export default function GraphTab({
             </div>
           )}
         </div>
+      )}
+
+      {modalCapture && (
+        <CaptureDetailModal
+          capture={modalCapture}
+          projects={projects}
+          onUpdate={(updated) => {
+            setCaptures((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+            setSelected(updated);
+            setModalCapture(null);
+          }}
+          onDelete={(id) => {
+            setCaptures((prev) => prev.filter((c) => c.id !== id));
+            setSelected(null);
+            setModalCapture(null);
+          }}
+          onClose={() => setModalCapture(null)}
+        />
       )}
     </div>
   );

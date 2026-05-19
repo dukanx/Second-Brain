@@ -114,7 +114,7 @@ export default function ChatTab({
           onClick={() => setExpanded(false)}
         >
           <div
-            className="w-full max-w-2xl bg-surface border border-border rounded-xl overflow-hidden shadow-2xl animate-fade-in flex flex-col max-h-[85vh]"
+            className="w-full max-w-5xl bg-surface border border-border rounded-xl overflow-hidden shadow-2xl animate-fade-in flex flex-col max-h-[90vh]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-5 py-4 border-b border-border flex items-center justify-between shrink-0">
@@ -168,7 +168,10 @@ export default function ChatTab({
               )}
             </div>
           </div>
-          <div className="px-4 py-3 max-h-40 overflow-y-auto">
+          <div
+            className="px-4 py-3 max-h-40 overflow-y-auto cursor-pointer"
+            onClick={() => setExpanded(true)}
+          >
             <p className="text-sm text-text font-medium mb-1">{pinnedCapture.title}</p>
             <p className="text-xs text-muted leading-relaxed whitespace-pre-wrap">{pinnedCapture.text}</p>
           </div>
