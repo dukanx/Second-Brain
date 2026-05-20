@@ -73,7 +73,7 @@ export async function GET(request: Request) {
   }
 
   const supabase = await createServiceClient();
-  const cutoff = new Date(Date.now() - 7 * 86400_000).toISOString();
+  const cutoff = new Date(Date.now() - 14 * 86400_000).toISOString();
 
   const { data: subs } = await supabase
     .from("push_subscriptions")

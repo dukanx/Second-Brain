@@ -223,11 +223,15 @@ export default function BrainClient({
   async function markReviewed(id: string) {
     const now = new Date().toISOString();
     setCaptures((prev) => prev.map((c) => c.id === id ? { ...c, last_reviewed_at: now } : c));
-    fetch(`/api/capture/${id}`, {
+    const res = await fetch(`/api/capture/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ last_reviewed_at: now }),
     });
+    const data = await res.json();
+    if (data.capture) {
+      setCaptures((prev) => prev.map((c) => c.id === data.capture.id ? data.capture : c));
+    }
   }
 
   async function signOut() {

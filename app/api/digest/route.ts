@@ -26,7 +26,7 @@ export async function POST() {
 
   const { data: captures } = await supabase
     .from("captures")
-    .select("id, title, text, type, project, created_at")
+    .select("id, title, text, type, project, created_at, last_reviewed_at")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(80);
@@ -38,7 +38,10 @@ export async function POST() {
   const catalogue = captures
     .map((c) => {
       const age = Math.floor((Date.now() - new Date(c.created_at).getTime()) / 86400000);
-      return `${c.id}|${c.type}|${c.project}|${age}d| ${c.title}: ${c.text.slice(0, 70)}`;
+      const reviewed = c.last_reviewed_at
+        ? `reviewed:${Math.floor((Date.now() - new Date(c.last_reviewed_at).getTime()) / 86400000)}d ago`
+        : "never reviewed";
+      return `${c.id}|${c.type}|${c.project}|${age}d|${reviewed}| ${c.title}: ${c.text.slice(0, 70)}`;
     })
     .join("\n");
 
