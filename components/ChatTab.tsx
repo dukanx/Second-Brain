@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import type { Capture } from "./BrainClient";
 import { TypeIcon } from "./BrainClient";
 import { Brain, Sparkles, Maximize2, Check, X, Loader2, Trash2, Send, MessageSquare, ArrowLeft } from "lucide-react";
+import Markdown from "./Markdown";
 
 type Message = { role: "user" | "assistant"; content: string };
 
@@ -126,7 +127,7 @@ export default function ChatTab({
             </div>
             <div className="px-5 py-5 overflow-y-auto flex-1">
               <p className="text-sm text-white font-semibold mb-3">{pinnedCapture.title}</p>
-              <p className="text-sm text-white leading-6 whitespace-pre-wrap">{pinnedCapture.text}</p>
+              <Markdown>{pinnedCapture.text}</Markdown>
             </div>
             <div className="px-5 py-3 border-t border-border shrink-0">
               <button
@@ -213,13 +214,17 @@ export default function ChatTab({
                 ? "bg-amber/10 border border-amber/20 text-text"
                 : "bg-surface terminal-border text-text"
             }`}>
-              {msg.role === "assistant" && (
-                <span className="text-purple text-[10px] flex items-center gap-1 mb-1">
-                <Brain size={10} strokeWidth={2} />
-                brain
-              </span>
+              {msg.role === "assistant" ? (
+                <>
+                  <span className="text-purple text-[10px] flex items-center gap-1 mb-1">
+                    <Brain size={10} strokeWidth={2} />
+                    brain
+                  </span>
+                  <Markdown size="xs">{msg.content}</Markdown>
+                </>
+              ) : (
+                <p className="whitespace-pre-wrap">{msg.content}</p>
               )}
-              <p className="whitespace-pre-wrap">{msg.content}</p>
             </div>
           </div>
         ))}

@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Capture, Project } from "./BrainClient";
 import { TypeIcon } from "./BrainClient";
 import { X, ArrowLeft, Pencil, Trash2 } from "lucide-react";
+import Markdown from "./Markdown";
 
 export default function CaptureDetailModal({
   capture,
@@ -83,7 +84,7 @@ export default function CaptureDetailModal({
                 </a>
               ) : null;
             })()}
-            <p className="text-sm text-text leading-7 whitespace-pre-wrap">{capture.text}</p>
+            <Markdown>{capture.text}</Markdown>
           </div>
         )}
 

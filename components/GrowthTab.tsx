@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import type { Capture } from "./BrainClient";
 import { TypeIcon } from "./BrainClient";
+import Markdown from "./Markdown";
 import {
   FileText, ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
   Loader2, ArrowRight, Waves, Square, Eye,
@@ -573,7 +574,7 @@ export default function GrowthTab({
                   {expanded && (
                     <div className="animate-fade-in">
                       <div className="px-5 py-4 bg-bg/40">
-                        <p className="text-sm text-text leading-7 whitespace-pre-wrap">{c.text}</p>
+                        <Markdown>{c.text}</Markdown>
                       </div>
                       <div className="flex items-center justify-between px-4 py-2 border-t border-border">
                         <div className="flex gap-3 text-[10px] text-muted">
@@ -762,7 +763,7 @@ function TaskRow({
             </div>
           ) : (
             <div className="px-5 py-3 bg-bg/40">
-              <p className="text-sm text-text leading-7 whitespace-pre-wrap">{task.text}</p>
+              <Markdown>{task.text}</Markdown>
             </div>
           )}
           <div className="flex items-center gap-3 px-4 py-2 border-t border-border text-[10px] text-muted">

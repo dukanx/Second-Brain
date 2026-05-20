@@ -7,6 +7,7 @@ import {
   Sparkles, Link as LinkIcon, Pencil, Trash2, Download, Check, Star,
   ChevronDown, ChevronUp, MessageSquare, Plus, X, Inbox,
 } from "lucide-react";
+import Markdown from "./Markdown";
 
 function abbrev(name: string): string {
   const words = name.trim().split(/\s+/);
@@ -656,7 +657,7 @@ function CaptureCard({
                 </a>
               ) : null;
             })()}
-            <p className="text-sm text-text leading-7 whitespace-pre-wrap">{capture.text}</p>
+            <Markdown>{capture.text}</Markdown>
           </div>
           <div className="flex items-center justify-between px-4 py-3 border-t border-border">
             <div className="flex gap-3 text-xs text-muted">
