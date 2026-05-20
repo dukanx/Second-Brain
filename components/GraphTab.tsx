@@ -2,7 +2,12 @@
 
 import { useEffect, useRef, useState, useMemo } from "react";
 import type { Capture, Project } from "./BrainClient";
+import { TypeIcon } from "./BrainClient";
 import CaptureDetailModal from "./CaptureDetailModal";
+import {
+  SlidersHorizontal, Maximize2, GitMerge, Pencil, X, Check,
+  ArrowRight, Network, Loader2,
+} from "lucide-react";
 
 type Node = {
   id: string;
@@ -568,7 +573,8 @@ export default function GraphTab({
 
         {/* Filter toggle */}
         <button onClick={() => setShowFilters((v) => !v)}
-          className={`text-xs px-3 py-1 border rounded transition-colors ${showFilters ? "border-blue text-blue bg-blue/10" : "border-border text-muted hover:text-text"}`}>
+          className={`flex items-center gap-1.5 text-xs px-3 py-1 border rounded transition-colors ${showFilters ? "border-blue text-blue bg-blue/10" : "border-border text-muted hover:text-text"}`}>
+          <SlidersHorizontal size={12} strokeWidth={1.75} />
           filter{selectedProjects.size + selectedTypes.size > 0 ? ` (${selectedProjects.size + selectedTypes.size})` : ""}
         </button>
         {(selectedProjects.size > 0 || selectedTypes.size > 0) && (
@@ -583,11 +589,13 @@ export default function GraphTab({
         <div className="ml-auto flex gap-2">
           {/* Fit view */}
           <button onClick={fitView}
-            className="text-xs px-3 py-1 border border-border text-muted rounded hover:text-text transition-colors">
+            className="flex items-center gap-1.5 text-xs px-3 py-1 border border-border text-muted rounded hover:text-text transition-colors">
+            <Maximize2 size={12} strokeWidth={1.75} />
             fit()
           </button>
           <button onClick={runBatchRelate} disabled={relating || captures.length < 2}
-            className="text-xs px-3 py-1 border border-purple text-purple rounded hover:bg-purple hover:text-bg active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+            className="flex items-center gap-1.5 text-xs px-3 py-1 border border-purple text-purple rounded hover:bg-purple hover:text-bg active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+            {relating ? <Loader2 size={12} className="animate-spin" strokeWidth={2} /> : <GitMerge size={12} strokeWidth={1.75} />}
             {relating ? "..." : "relate_all()"}
           </button>
         </div>
@@ -604,10 +612,10 @@ export default function GraphTab({
               const lit = active || !anySelected;
               return (
                 <button key={t} onClick={() => toggleType(t)}
-                  className={`text-xs px-2 py-0.5 rounded border transition-colors ${lit ? "" : "opacity-30"}`}
+                  className={`inline-flex items-center text-xs px-2 py-0.5 rounded border transition-colors ${lit ? "" : "opacity-30"}`}
                   style={{ borderColor: lit ? TYPE_COLORS[t] + "66" : undefined,
                            color: lit ? TYPE_COLORS[t] : undefined }}>
-                  {active && <span className="mr-1 text-[9px]">✓</span>}{t}
+                  {active && <Check size={10} className="mr-1" strokeWidth={2.5} />}{t}
                 </button>
               );
             })}
@@ -620,10 +628,10 @@ export default function GraphTab({
               const lit = active || !anySelected;
               return (
                 <button key={p} onClick={() => toggleProject(p)}
-                  className={`text-xs px-2 py-0.5 rounded border transition-colors ${lit ? "" : "opacity-30"}`}
+                  className={`inline-flex items-center text-xs px-2 py-0.5 rounded border transition-colors ${lit ? "" : "opacity-30"}`}
                   style={{ borderColor: lit ? projectColorsRef.current[p] + "66" : undefined,
                            color: lit ? projectColorsRef.current[p] : undefined }}>
-                  {active && <span className="mr-1 text-[9px]">✓</span>}{abbrev(p)}
+                  {active && <Check size={10} className="mr-1" strokeWidth={2.5} />}{abbrev(p)}
                 </button>
               );
             })}
@@ -651,7 +659,8 @@ export default function GraphTab({
       {/* Canvas */}
       <div className="relative bg-surface terminal-border rounded-lg overflow-hidden h-[340px] sm:h-[540px]">
         {captures.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-muted text-xs">
+          <div className="flex flex-col items-center justify-center gap-2 h-full text-muted text-xs">
+            <Network size={22} strokeWidth={1.5} />
             no captures to graph yet
           </div>
         ) : (
@@ -694,26 +703,26 @@ export default function GraphTab({
                   {selected.project}
                 </span>
                 <span className="text-muted text-xs">·</span>
-                <span className="text-xs" style={{ color: TYPE_COLORS[selected.type] ?? "#94a3b8" }}>
-                  [{selected.type}]
-                </span>
+                <TypeIcon type={selected.type} size={12} />
+                <span className="text-xs text-muted">{selected.type}</span>
               </div>
               <p className="text-sm text-text font-bold">{selected.title}</p>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setModalCapture(selected)}
-                className="text-xs text-muted hover:text-blue border border-border rounded px-2 py-0.5 hover:border-blue transition-colors"
+                className="flex items-center gap-1 text-xs text-muted hover:text-blue border border-border rounded px-2 py-0.5 hover:border-blue transition-colors"
               >
+                <Pencil size={11} strokeWidth={1.75} />
                 edit
               </button>
-              <button onClick={() => setSelected(null)} className="text-muted hover:text-text text-xs">✕</button>
+              <button onClick={() => setSelected(null)} className="text-muted hover:text-text flex items-center"><X size={14} strokeWidth={1.75} /></button>
             </div>
           </div>
           <p className="text-xs text-muted leading-relaxed mb-3 whitespace-pre-wrap">{selected.text}</p>
           {connectedCaptures.length > 0 && (
             <div>
-              <p className="text-xs text-muted mb-2">→ <span className="text-purple">{connectedCaptures.length} connected</span></p>
+              <p className="text-xs text-muted mb-2 flex items-center gap-1.5"><ArrowRight size={12} strokeWidth={2} /> <span className="text-purple">{connectedCaptures.length} connected</span></p>
               <div className="grid grid-cols-2 gap-1">
                 {connectedCaptures.map((c) => (
                   <button key={c.id} onClick={() => setSelected(c)}

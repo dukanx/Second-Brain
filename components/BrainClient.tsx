@@ -11,6 +11,12 @@ import ChatTab from "./ChatTab";
 import ArchitectureTab from "./ArchitectureTab";
 import SearchOverlay from "./SearchOverlay";
 import type { User } from "@supabase/supabase-js";
+import {
+  Sparkles, Search, Network, Sprout, MessageSquare, Hexagon,
+  Brain, Bell, RefreshCw, Circle, Power,
+  Lightbulb, Link2, CheckSquare, GraduationCap, StickyNote,
+  type LucideIcon,
+} from "lucide-react";
 
 export type Capture = {
   id: string;
@@ -44,15 +50,35 @@ const TYPE_COLORS: Record<string, string> = {
   Note: "text-muted",
 };
 
-export { TYPE_COLORS };
+const TYPE_ICONS: Record<string, LucideIcon> = {
+  Idea: Lightbulb,
+  Link: Link2,
+  Task: CheckSquare,
+  Learning: GraduationCap,
+  Note: StickyNote,
+};
 
-const TABS: { id: Tab; label: string; icon: string; activeColor: string; desktopOnly?: boolean }[] = [
-  { id: "capture", label: "capture", icon: "✦", activeColor: "text-amber"  },
-  { id: "search",  label: "search",  icon: "⌕", activeColor: "text-blue"   },
-  { id: "graph",   label: "graph",   icon: "◉", activeColor: "text-green"  },
-  { id: "grow",    label: "grow",    icon: "✺", activeColor: "text-green"  },
-  { id: "chat",    label: "chat",    icon: "◇", activeColor: "text-purple" },
-  { id: "arch",    label: "arch",    icon: "⬡", activeColor: "text-muted", desktopOnly: true },
+function TypeIcon({ type, size = 13, className = "" }: { type: string; size?: number; className?: string }) {
+  const Icon = TYPE_ICONS[type] ?? StickyNote;
+  return (
+    <Icon
+      size={size}
+      strokeWidth={1.75}
+      className={`${TYPE_COLORS[type] ?? "text-muted"} ${className}`}
+      aria-label={type}
+    />
+  );
+}
+
+export { TYPE_COLORS, TYPE_ICONS, TypeIcon };
+
+const TABS: { id: Tab; label: string; Icon: LucideIcon; activeColor: string; desktopOnly?: boolean }[] = [
+  { id: "capture", label: "capture", Icon: Sparkles,       activeColor: "text-amber"  },
+  { id: "search",  label: "search",  Icon: Search,         activeColor: "text-blue"   },
+  { id: "graph",   label: "graph",   Icon: Network,        activeColor: "text-green"  },
+  { id: "grow",    label: "grow",    Icon: Sprout,         activeColor: "text-green"  },
+  { id: "chat",    label: "chat",    Icon: MessageSquare,  activeColor: "text-purple" },
+  { id: "arch",    label: "arch",    Icon: Hexagon,        activeColor: "text-muted", desktopOnly: true },
 ];
 
 export default function BrainClient({
@@ -245,7 +271,8 @@ export default function BrainClient({
       {/* Header */}
       <header className="bg-surface border-b border-border px-4 py-3 flex items-center justify-between sticky top-0 z-20">
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <Brain size={14} className="text-amber" strokeWidth={2.25} />
             <span className="text-amber font-bold text-sm tracking-tight">second_brain</span>
           </div>
           {/* Desktop tabs */}
@@ -254,13 +281,14 @@ export default function BrainClient({
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                className={`px-3 py-1 text-xs rounded transition-all duration-150 ${
+                className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded transition-all duration-150 ${
                   tab === t.id
                     ? `${t.activeColor} bg-bg border border-border`
                     : "text-muted hover:text-text"
                 }`}
               >
-                [{t.label}]
+                <t.Icon size={12} strokeWidth={tab === t.id ? 2.25 : 1.75} />
+                <span>[{t.label}]</span>
               </button>
             ))}
           </nav>
@@ -270,10 +298,10 @@ export default function BrainClient({
           {notifStatus !== "subscribed" && notifStatus !== "denied" && (
             <button
               onClick={enableNotifications}
-              className="text-xs text-muted hover:text-amber border border-border rounded px-2 py-1 transition-colors hidden sm:block"
+              className="hidden sm:flex items-center text-xs text-muted hover:text-amber border border-border rounded px-2 py-1 transition-colors"
               title="Enable review reminders"
             >
-              🔔
+              <Bell size={13} strokeWidth={1.75} />
             </button>
           )}
           <button
@@ -281,27 +309,30 @@ export default function BrainClient({
             className="flex items-center gap-1.5 text-xs text-muted hover:text-text border border-border rounded px-2 py-1 transition-colors"
             title="Search (⌘K)"
           >
-            <span>⌕</span>
+            <Search size={13} strokeWidth={1.75} />
             <kbd className="hidden sm:inline text-[10px] border border-border rounded px-1">⌘K</kbd>
           </button>
           {/* Sync indicator */}
           <button
             onClick={() => sync()}
-            className="flex items-center gap-1 text-xs text-muted hover:text-text transition-colors"
+            className="flex items-center gap-1.5 text-xs text-muted hover:text-text transition-colors"
             title="sync now"
           >
-            <span className={syncing ? "animate-spin text-amber" : "text-green"}>
-              {syncing ? "↻" : "■"}
-            </span>
+            {syncing ? (
+              <RefreshCw size={13} className="animate-spin text-amber" strokeWidth={2} />
+            ) : (
+              <Circle size={11} className="text-green fill-green" strokeWidth={0} />
+            )}
             <span className="hidden sm:inline">{captures.length} captures</span>
             <span className="sm:hidden">{captures.length}</span>
           </button>
           <span className="text-xs text-muted hidden sm:block">{user.email}</span>
           <button
             onClick={signOut}
-            className="text-xs text-muted hover:text-amber transition-colors px-2 py-1 border border-border rounded hover:border-amber"
+            className="text-xs text-muted hover:text-amber transition-colors px-2 py-1 border border-border rounded hover:border-amber flex items-center gap-1.5"
           >
-            exit()
+            <Power size={13} strokeWidth={1.75} />
+            <span className="hidden sm:inline">exit()</span>
           </button>
         </div>
       </header>
@@ -326,7 +357,7 @@ export default function BrainClient({
               tab === t.id ? t.activeColor : "text-muted"
             }`}
           >
-            <span className="text-base leading-none">{t.icon}</span>
+            <t.Icon size={18} strokeWidth={tab === t.id ? 2.25 : 1.75} />
             <span className="text-[10px] tracking-wide">{t.label}</span>
           </button>
         ))}

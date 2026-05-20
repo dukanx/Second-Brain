@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import type { Capture, Project } from "./BrainClient";
-import { TYPE_COLORS } from "./BrainClient";
+import { TypeIcon } from "./BrainClient";
+import { X, ArrowLeft, Pencil, Trash2 } from "lucide-react";
 
 export default function CaptureDetailModal({
   capture,
@@ -63,10 +64,10 @@ export default function CaptureDetailModal({
         {/* Header */}
         <div className="px-5 py-4 border-b border-border flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
-            <span className={`text-xs ${TYPE_COLORS[capture.type] ?? "text-muted"}`}>[{capture.type}]</span>
+            <TypeIcon type={capture.type} size={13} />
             <span className="text-xs text-muted">{capture.project}</span>
           </div>
-          <button onClick={onClose} className="text-muted hover:text-text text-sm transition-colors">✕</button>
+          <button onClick={onClose} className="text-muted hover:text-text transition-colors flex items-center"><X size={14} strokeWidth={1.75} /></button>
         </div>
 
         {/* View mode */}
@@ -128,18 +129,20 @@ export default function CaptureDetailModal({
         <div className="px-5 py-3 border-t border-border shrink-0 flex items-center justify-between">
           {mode === "view" && (
             <>
-              <button onClick={onClose} className="text-xs text-muted hover:text-text transition-colors">← zatvori</button>
+              <button onClick={onClose} className="flex items-center gap-1.5 text-xs text-muted hover:text-text transition-colors"><ArrowLeft size={12} strokeWidth={1.75} /> zatvori</button>
               <div className="flex gap-2">
                 <button
                   onClick={() => setMode("confirmDelete")}
-                  className="text-xs px-3 py-1 border border-border text-muted rounded hover:text-red-400 hover:border-red-400 transition-colors"
+                  className="flex items-center gap-1 text-xs px-3 py-1 border border-border text-muted rounded hover:text-red-400 hover:border-red-400 transition-colors"
                 >
+                  <Trash2 size={11} strokeWidth={1.75} />
                   delete
                 </button>
                 <button
                   onClick={() => setMode("edit")}
-                  className="text-xs px-3 py-1 border border-blue text-blue rounded hover:bg-blue/10 transition-colors"
+                  className="flex items-center gap-1 text-xs px-3 py-1 border border-blue text-blue rounded hover:bg-blue/10 transition-colors"
                 >
+                  <Pencil size={11} strokeWidth={1.75} />
                   edit
                 </button>
               </div>

@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import type { Capture, Project } from "./BrainClient";
-import { TYPE_COLORS } from "./BrainClient";
+import { TypeIcon } from "./BrainClient";
 import CaptureDetailModal from "./CaptureDetailModal";
+import { Search, X, SearchX } from "lucide-react";
 
 function abbrev(name: string): string {
   const words = name.trim().split(/\s+/);
@@ -66,7 +67,7 @@ export default function SearchOverlay({
       <div className="w-full max-w-2xl bg-surface border border-border rounded-xl overflow-hidden shadow-2xl animate-fade-in">
         {/* Input */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
-          <span className="text-muted text-sm shrink-0">⌕</span>
+          <Search size={15} className="text-muted shrink-0" strokeWidth={2} />
           <input
             ref={inputRef}
             value={query}
@@ -75,7 +76,7 @@ export default function SearchOverlay({
             className="flex-1 bg-transparent text-text placeholder-muted text-sm focus:outline-none font-mono"
           />
           {query && (
-            <button onClick={() => { setQuery(""); setSelected(null); }} className="text-muted hover:text-text text-xs shrink-0">✕</button>
+            <button onClick={() => { setQuery(""); setSelected(null); }} className="text-muted hover:text-text shrink-0 flex items-center"><X size={14} strokeWidth={1.75} /></button>
           )}
           <kbd className="hidden sm:inline text-xs text-muted border border-border rounded px-1.5 py-0.5 shrink-0">esc</kbd>
         </div>
@@ -99,7 +100,10 @@ export default function SearchOverlay({
         {/* Results */}
         <div className="max-h-[60vh] overflow-y-auto">
           {results.length === 0 ? (
-            <p className="text-xs text-muted py-8 text-center">no results for &quot;{query}&quot;</p>
+            <div className="flex flex-col items-center gap-2 py-8 text-muted">
+              <SearchX size={20} strokeWidth={1.5} />
+              <p className="text-xs">no results for &quot;{query}&quot;</p>
+            </div>
           ) : (
             results.map((c) => (
               <button
@@ -108,7 +112,7 @@ export default function SearchOverlay({
                 className="w-full text-left px-4 py-3 hover:bg-border transition-colors border-b border-border/50 last:border-0"
               >
                 <div className="flex items-center gap-2 mb-0.5">
-                  <span className={`text-xs shrink-0 ${TYPE_COLORS[c.type] ?? "text-muted"}`}>[{c.type}]</span>
+                  <TypeIcon type={c.type} size={13} className="shrink-0" />
                   <span className="text-sm text-text truncate flex-1">
                     {highlight(c.title, words)}
                   </span>
@@ -117,7 +121,7 @@ export default function SearchOverlay({
                   </span>
                 </div>
                 {words.length > 0 && (
-                  <p className="text-xs text-muted truncate pl-14">
+                  <p className="text-xs text-muted truncate pl-6">
                     {highlight(c.text.slice(0, 100), words)}
                   </p>
                 )}

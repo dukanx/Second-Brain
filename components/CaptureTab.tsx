@@ -2,7 +2,11 @@
 
 import { useState, useRef, useCallback, useMemo } from "react";
 import type { Capture, Project } from "./BrainClient";
-import { TYPE_COLORS } from "./BrainClient";
+import { TYPE_COLORS, TypeIcon } from "./BrainClient";
+import {
+  Sparkles, Link as LinkIcon, Pencil, Trash2, Download, Check, Star,
+  ChevronDown, ChevronUp, MessageSquare, Plus, X, Inbox,
+} from "lucide-react";
 
 function abbrev(name: string): string {
   const words = name.trim().split(/\s+/);
@@ -230,7 +234,10 @@ export default function CaptureTab({
       {/* Input */}
       <div className="bg-surface terminal-border rounded-lg overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-2 border-b border-border">
-          <span className="text-amber text-xs">capture</span>
+          <span className="text-amber text-xs flex items-center gap-1.5">
+            <Sparkles size={12} strokeWidth={2} />
+            capture
+          </span>
           {isUrl && (
             <span className="text-blue text-xs ml-1">
               {text.trim().includes("youtube.com") || text.trim().includes("youtu.be")
@@ -267,12 +274,13 @@ export default function CaptureTab({
         />
         {sourceUrl && (
           <div className="px-4 py-2 border-t border-border flex items-center gap-2">
-            <span className="text-[10px] text-muted">// source:</span>
+            <LinkIcon size={11} className="text-muted shrink-0" strokeWidth={1.75} />
+            <span className="text-[10px] text-muted">source:</span>
             <span className="text-[10px] text-blue truncate flex-1">{sourceUrl}</span>
             <button
               onClick={() => setSourceUrl("")}
-              className="text-muted hover:text-red-400 text-sm transition-colors shrink-0"
-            >×</button>
+              className="text-muted hover:text-red-400 transition-colors shrink-0 flex items-center"
+            ><X size={13} strokeWidth={1.75} /></button>
           </div>
         )}
         {isTaskMode && (
@@ -305,9 +313,9 @@ export default function CaptureTab({
               {dueDate && (
                 <button
                   onClick={() => setDueDate("")}
-                  className="text-muted hover:text-red-400 text-sm transition-colors shrink-0"
+                  className="text-muted hover:text-red-400 transition-colors shrink-0 flex items-center"
                 >
-                  ×
+                  <X size={13} strokeWidth={1.75} />
                 </button>
               )}
             </div>
@@ -363,9 +371,10 @@ export default function CaptureTab({
             {isTaskMode && (
               <button
                 onClick={addSubtask}
-                className="text-[10px] text-muted hover:text-green border border-border hover:border-green rounded px-2 py-1.5 transition-colors"
+                className="flex items-center gap-1 text-[10px] text-muted hover:text-green border border-border hover:border-green rounded px-2 py-1.5 transition-colors"
               >
-                + subtask
+                <Plus size={11} strokeWidth={2} />
+                subtask
               </button>
             )}
             <button
@@ -389,7 +398,7 @@ export default function CaptureTab({
       {lastSaved && !saving && (
         <div className="text-xs bg-green/10 border border-green/20 rounded px-4 py-3 animate-fade-in">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-green">✓</span>
+            <Check size={13} className="text-green shrink-0" strokeWidth={2.5} />
             <span className="text-green font-bold truncate">{lastSaved.title}</span>
           </div>
           <div className="flex items-center justify-between flex-wrap gap-2">
@@ -412,13 +421,13 @@ export default function CaptureTab({
         <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
           <button
             onClick={() => setFilterStarred((s) => !s)}
-            className={`shrink-0 text-xs px-2.5 py-1 rounded border transition-colors ${
+            className={`shrink-0 flex items-center text-xs px-2.5 py-1 rounded border transition-colors ${
               filterStarred
                 ? "border-amber text-amber bg-amber/10"
                 : "border-border text-muted hover:text-text"
             }`}
           >
-            ★
+            <Star size={12} strokeWidth={1.75} fill={filterStarred ? "currentColor" : "none"} />
           </button>
           {TYPES.map((t) => (
             <button
@@ -481,15 +490,17 @@ export default function CaptureTab({
           <div className="flex gap-1.5">
             <button
               onClick={exportMarkdown}
-              className="text-[10px] text-muted hover:text-text border border-border rounded px-2 py-0.5 transition-colors"
+              className="flex items-center gap-1 text-[10px] text-muted hover:text-text border border-border rounded px-2 py-0.5 transition-colors"
             >
-              export .md
+              <Download size={10} strokeWidth={1.75} />
+              .md
             </button>
             <button
               onClick={exportJSON}
-              className="text-[10px] text-muted hover:text-text border border-border rounded px-2 py-0.5 transition-colors"
+              className="flex items-center gap-1 text-[10px] text-muted hover:text-text border border-border rounded px-2 py-0.5 transition-colors"
             >
-              export .json
+              <Download size={10} strokeWidth={1.75} />
+              .json
             </button>
           </div>
         </div>
@@ -513,7 +524,10 @@ export default function CaptureTab({
             />
           ))}
           {filtered.length === 0 && (
-            <p className="text-xs text-muted py-8 text-center">no captures match filters</p>
+            <div className="flex flex-col items-center gap-2 py-8 text-muted">
+              <Inbox size={20} strokeWidth={1.5} />
+              <p className="text-xs">no captures match filters</p>
+            </div>
           )}
         </div>
       </div>
@@ -597,13 +611,12 @@ function CaptureCard({
         className="flex items-center gap-2 px-4 py-3 cursor-pointer active:bg-border transition-colors"
         onClick={() => mode === "view" && setExpanded((e) => !e)}
       >
-        <span className={`text-xs shrink-0 ${TYPE_COLORS[capture.type] ?? "text-muted"}`}>
-          [{capture.type}]
-        </span>
+        <TypeIcon type={capture.type} size={14} className="shrink-0" />
         <span className="text-sm text-text truncate flex-1">{capture.title}</span>
-        <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               const next = !capture.starred;
               onStar(capture.id, next);
               fetch(`/api/capture/${capture.id}`, {
@@ -612,16 +625,18 @@ function CaptureCard({
                 body: JSON.stringify({ starred: next }),
               });
             }}
-            className={`text-lg leading-none transition-colors ${capture.starred ? "text-amber" : "text-muted hover:text-amber"}`}
+            className={`flex items-center transition-colors ${capture.starred ? "text-amber" : "text-muted hover:text-amber"}`}
           >
-            {capture.starred ? "★" : "☆"}
+            <Star size={14} strokeWidth={1.75} fill={capture.starred ? "currentColor" : "none"} />
           </button>
           {capture.related_ids?.length > 0 && (
-            <span className="text-xs text-purple">~{capture.related_ids.length}</span>
+            <span className={`text-xs text-purple ${expanded ? "" : "hidden sm:inline"}`}>~{capture.related_ids.length}</span>
           )}
-          <span className="text-xs text-muted">{date}</span>
+          <span className={`text-xs text-muted ${expanded ? "" : "hidden sm:inline"}`}>{date}</span>
           {mode === "view" && (
-            <span className="text-xs text-muted">{expanded ? "▴" : "▾"}</span>
+            <span className="text-muted flex items-center">
+              {expanded ? <ChevronUp size={12} strokeWidth={2} /> : <ChevronDown size={12} strokeWidth={2} />}
+            </span>
           )}
         </div>
       </div>
@@ -654,21 +669,24 @@ function CaptureCard({
             <div className="flex gap-2">
               <button
                 onClick={() => onChatAbout(capture.id)}
-                className="text-xs text-muted hover:text-purple transition-colors px-2 py-0.5 border border-border rounded hover:border-purple"
+                className="flex items-center gap-1 text-xs text-muted hover:text-purple transition-colors px-2 py-0.5 border border-border rounded hover:border-purple"
               >
-                ◇ chat
+                <MessageSquare size={11} strokeWidth={1.75} />
+                <span className="hidden sm:inline">chat</span>
               </button>
               <button
                 onClick={startEdit}
-                className="text-xs text-muted hover:text-blue transition-colors px-2 py-0.5 border border-border rounded hover:border-blue"
+                className="flex items-center gap-1 text-xs text-muted hover:text-blue transition-colors px-2 py-0.5 border border-border rounded hover:border-blue"
               >
-                edit
+                <Pencil size={11} strokeWidth={1.75} />
+                <span className="hidden sm:inline">edit</span>
               </button>
               <button
                 onClick={() => setMode("confirmDelete")}
-                className="text-xs text-muted hover:text-red-400 transition-colors px-2 py-0.5 border border-border rounded hover:border-red-400"
+                className="flex items-center gap-1 text-xs text-muted hover:text-red-400 transition-colors px-2 py-0.5 border border-border rounded hover:border-red-400"
               >
-                delete
+                <Trash2 size={11} strokeWidth={1.75} />
+                <span className="hidden sm:inline">delete</span>
               </button>
             </div>
           </div>
@@ -800,10 +818,10 @@ function NewProjectButton({ onCreated }: { onCreated: (name: string) => void }) 
     return (
       <button
         onClick={() => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 0); }}
-        className="shrink-0 text-xs px-2.5 py-1 rounded border border-dashed border-border text-muted hover:text-text hover:border-text transition-colors"
+        className="shrink-0 flex items-center text-xs px-2 py-1 rounded border border-dashed border-border text-muted hover:text-text hover:border-text transition-colors"
         title="Add project"
       >
-        +
+        <Plus size={12} strokeWidth={2} />
       </button>
     );
   }

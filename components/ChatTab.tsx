@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import type { Capture } from "./BrainClient";
+import { TypeIcon } from "./BrainClient";
+import { Brain, Sparkles, Maximize2, Check, X, Loader2, Trash2, Send, MessageSquare, ArrowLeft } from "lucide-react";
 
 type Message = { role: "user" | "assistant"; content: string };
 
@@ -22,10 +24,6 @@ function findContext(query: string, captures: Capture[], pinned: Capture | null,
     : rest.slice(0, pinned ? n - 1 : n);
   return pinned ? [pinned, ...ranked] : ranked;
 }
-
-const TYPE_COLOR: Record<string, string> = {
-  Idea: "text-amber", Link: "text-blue", Task: "text-green", Learning: "text-purple", Note: "text-muted",
-};
 
 export default function ChatTab({
   captures,
@@ -119,10 +117,12 @@ export default function ChatTab({
           >
             <div className="px-5 py-4 border-b border-border flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
-                <span className={`text-xs ${TYPE_COLOR[pinnedCapture.type] ?? "text-muted"}`}>[{pinnedCapture.type}]</span>
+                <TypeIcon type={pinnedCapture.type} size={13} />
                 <span className="text-xs text-muted">{pinnedCapture.project}</span>
               </div>
-              <button onClick={() => setExpanded(false)} className="text-muted hover:text-text text-sm transition-colors">✕</button>
+              <button onClick={() => setExpanded(false)} className="text-muted hover:text-text transition-colors flex items-center">
+                <X size={14} strokeWidth={1.75} />
+              </button>
             </div>
             <div className="px-5 py-5 overflow-y-auto flex-1">
               <p className="text-sm text-white font-semibold mb-3">{pinnedCapture.title}</p>
@@ -131,9 +131,10 @@ export default function ChatTab({
             <div className="px-5 py-3 border-t border-border shrink-0">
               <button
                 onClick={() => setExpanded(false)}
-                className="text-xs text-muted hover:text-text transition-colors"
+                className="flex items-center gap-1.5 text-xs text-muted hover:text-text transition-colors"
               >
-                ← zatvori
+                <ArrowLeft size={12} strokeWidth={1.75} />
+                zatvori
               </button>
             </div>
           </div>
@@ -144,27 +145,32 @@ export default function ChatTab({
         <div className={`mb-3 bg-surface terminal-border rounded-lg overflow-hidden transition-opacity ${reviewed ? "opacity-50" : ""}`}>
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-muted">// review this capture</span>
-              <span className={`text-[10px] ${TYPE_COLOR[pinnedCapture.type] ?? "text-muted"}`}>[{pinnedCapture.type}]</span>
+              <span className="text-[10px] text-muted flex items-center gap-1">
+                <Sparkles size={10} strokeWidth={1.75} />
+                review this capture
+              </span>
+              <TypeIcon type={pinnedCapture.type} size={11} />
               <span className="text-[10px] text-muted">{pinnedCapture.project}</span>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setExpanded(true)}
-                className="text-[10px] text-muted hover:text-text border border-border rounded px-2 py-1 transition-colors"
+                className="flex items-center text-muted hover:text-text border border-border rounded px-2 py-1 transition-colors"
                 title="Expand"
               >
-                ⤢
+                <Maximize2 size={11} strokeWidth={1.75} />
               </button>
               {!reviewed ? (
                 <button
                   onClick={handleMarkReviewed}
-                  className="text-xs px-3 py-1 border border-purple/40 text-purple rounded hover:bg-purple/10 transition-colors shrink-0"
+                  className="flex items-center gap-1 text-xs px-3 py-1 border border-purple/40 text-purple rounded hover:bg-purple/10 transition-colors shrink-0"
                 >
-                  done ✓
+                  done <Check size={11} strokeWidth={2.25} />
                 </button>
               ) : (
-                <span className="text-[10px] text-green">reviewed ✓</span>
+                <span className="flex items-center gap-1 text-[10px] text-green">
+                  reviewed <Check size={11} strokeWidth={2.25} />
+                </span>
               )}
             </div>
           </div>
@@ -182,8 +188,9 @@ export default function ChatTab({
       <div className="flex-1 overflow-y-auto space-y-3 pb-2">
         {history.length === 0 && (
           <div className="text-center pt-8 space-y-3">
-            <p className="text-muted text-xs">
-              {pinnedCapture ? "// ask anything about this capture" : "// ask anything about your captures"}
+            <p className="text-muted text-xs flex items-center justify-center gap-1.5">
+              <MessageSquare size={12} strokeWidth={1.5} />
+              {pinnedCapture ? "ask anything about this capture" : "ask anything about your captures"}
             </p>
             <div className="flex flex-wrap gap-2 justify-center">
               {suggestedQuestions.map((q) => (
@@ -207,7 +214,10 @@ export default function ChatTab({
                 : "bg-surface terminal-border text-text"
             }`}>
               {msg.role === "assistant" && (
-                <span className="text-purple text-[10px] block mb-1">◈ brain</span>
+                <span className="text-purple text-[10px] flex items-center gap-1 mb-1">
+                <Brain size={10} strokeWidth={2} />
+                brain
+              </span>
               )}
               <p className="whitespace-pre-wrap">{msg.content}</p>
             </div>
@@ -217,8 +227,14 @@ export default function ChatTab({
         {loading && (
           <div className="flex justify-start">
             <div className="bg-surface terminal-border rounded-lg px-3 py-2">
-              <span className="text-purple text-[10px] block mb-1">◈ brain</span>
-              <span className="text-muted text-xs animate-pulse">thinking...</span>
+              <span className="text-purple text-[10px] flex items-center gap-1 mb-1">
+                <Brain size={10} strokeWidth={2} />
+                brain
+              </span>
+              <span className="text-muted text-xs animate-pulse flex items-center gap-1.5">
+                <Loader2 size={11} className="animate-spin" strokeWidth={2} />
+                thinking...
+              </span>
             </div>
           </div>
         )}
@@ -243,8 +259,9 @@ export default function ChatTab({
             {history.length > 0 && (
               <button
                 onClick={() => setHistory([])}
-                className="text-[10px] text-muted hover:text-red-400 transition-colors"
+                className="flex items-center gap-1 text-[10px] text-muted hover:text-red-400 transition-colors"
               >
+                <Trash2 size={10} strokeWidth={1.75} />
                 clear
               </button>
             )}
@@ -252,9 +269,16 @@ export default function ChatTab({
           <button
             onClick={send}
             disabled={!input.trim() || loading}
-            className="text-xs px-4 py-1.5 bg-purple text-bg rounded font-bold hover:bg-violet-400 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 text-xs px-4 py-1.5 bg-purple text-bg rounded font-bold hover:bg-violet-400 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {loading ? "..." : "ask()"}
+            {loading ? (
+              <Loader2 size={12} className="animate-spin" strokeWidth={2.5} />
+            ) : (
+              <>
+                <Send size={12} strokeWidth={2.5} />
+                ask()
+              </>
+            )}
           </button>
         </div>
       </div>

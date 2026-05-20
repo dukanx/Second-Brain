@@ -2,6 +2,13 @@
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import type { Capture } from "./BrainClient";
+import { TypeIcon } from "./BrainClient";
+import {
+  FileText, ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
+  Loader2, ArrowRight, Waves, Square, Eye,
+  Sun, CalendarRange, CalendarDays, Flame, LayoutGrid,
+  RotateCw, Check, CheckCircle2, ListTodo, Inbox,
+} from "lucide-react";
 
 const AMBER_SCALE = ["#0d1117", "#f59e0b22", "#f59e0b55", "#f59e0b99", "#f59e0b"];
 
@@ -240,14 +247,14 @@ export default function GrowthTab({
         return (
           <div className="bg-surface terminal-border rounded-lg overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <p className="text-xs text-muted">// digest</p>
+              <p className="text-xs text-muted flex items-center gap-1.5"><FileText size={12} strokeWidth={1.75} /> digest</p>
               <div className="flex items-center gap-2">
                 {digests.length > 1 && (
                   <button
                     onClick={() => setDigestHistoryOpen((o) => !o)}
-                    className="text-[10px] text-muted hover:text-text border border-border rounded px-2 py-0.5 transition-colors"
+                    className="flex items-center gap-1 text-[10px] text-muted hover:text-text border border-border rounded px-2 py-0.5 transition-colors"
                   >
-                    history ({digests.length}) {digestHistoryOpen ? "▴" : "▾"}
+                    history ({digests.length}) {digestHistoryOpen ? <ChevronUp size={11} strokeWidth={2} /> : <ChevronDown size={11} strokeWidth={2} />}
                   </button>
                 )}
                 <button
@@ -278,10 +285,14 @@ export default function GrowthTab({
             )}
 
             {!shown && !digestGenerating && (
-              <p className="text-xs text-muted py-6 text-center">generate your digest</p>
+              <p className="text-xs text-muted py-6 text-center flex items-center justify-center gap-1.5">
+                <FileText size={13} strokeWidth={1.5} /> generate your digest
+              </p>
             )}
             {digestGenerating && (
-              <p className="text-xs text-muted py-6 text-center animate-pulse">analyzing your knowledge base...</p>
+              <p className="text-xs text-muted py-6 text-center flex items-center justify-center gap-1.5">
+                <Loader2 size={13} className="animate-spin" strokeWidth={2} /> analyzing your knowledge base...
+              </p>
             )}
             {shown && !digestGenerating && (
               <div className="p-4 space-y-3 animate-fade-in">
@@ -304,7 +315,7 @@ export default function GrowthTab({
                   <ul className="space-y-1">
                     {d.highlights.map((h) => (
                       <li key={h} className="text-xs text-muted flex gap-2">
-                        <span className="text-amber shrink-0">→</span>
+                        <ArrowRight size={12} className="text-amber shrink-0 mt-0.5" strokeWidth={2} />
                         <span>{h}</span>
                       </li>
                     ))}
@@ -319,17 +330,17 @@ export default function GrowthTab({
                   <div className="space-y-3 pt-2 border-t border-border animate-fade-in">
                     {d.patterns && (
                       <div>
-                        <p className="text-[10px] text-muted mb-1">// patterns</p>
+                        <p className="text-[10px] text-muted mb-1 flex items-center gap-1.5"><Waves size={11} strokeWidth={1.75} /> patterns</p>
                         <p className="text-xs text-text leading-relaxed">{d.patterns}</p>
                       </div>
                     )}
                     {d.pendingTasks && d.pendingTasks.length > 0 && (
                       <div>
-                        <p className="text-[10px] text-muted mb-2">// pending tasks</p>
+                        <p className="text-[10px] text-muted mb-2 flex items-center gap-1.5"><Square size={11} strokeWidth={1.75} /> pending tasks</p>
                         <div className="space-y-1">
                           {d.pendingTasks.map((t) => (
                             <div key={t.id} className="flex items-center gap-2">
-                              <span className="text-green text-xs shrink-0">□</span>
+                              <Square size={11} className="text-green shrink-0" strokeWidth={1.75} />
                               <span className="text-xs text-text">{t.title}</span>
                             </div>
                           ))}
@@ -338,11 +349,11 @@ export default function GrowthTab({
                     )}
                     {d.forgottenIdeas && d.forgottenIdeas.length > 0 && (
                       <div>
-                        <p className="text-[10px] text-muted mb-2">// worth revisiting</p>
+                        <p className="text-[10px] text-muted mb-2 flex items-center gap-1.5"><Eye size={11} strokeWidth={1.75} /> worth revisiting</p>
                         <div className="space-y-1">
                           {d.forgottenIdeas.map((idea) => (
                             <div key={idea.id} className="flex items-center gap-2">
-                              <span className="text-purple text-xs shrink-0">◈</span>
+                              <Eye size={11} className="text-purple shrink-0" strokeWidth={1.75} />
                               <span className="text-xs text-text">{idea.title}</span>
                             </div>
                           ))}
@@ -351,7 +362,7 @@ export default function GrowthTab({
                     )}
                     {d.suggestion && (
                       <div className="border border-blue/20 rounded p-3">
-                        <p className="text-[10px] text-blue mb-1">// suggested next action</p>
+                        <p className="text-[10px] text-blue mb-1 flex items-center gap-1.5"><ArrowRight size={11} strokeWidth={2} /> suggested next action</p>
                         <p className="text-xs text-text leading-relaxed">{d.suggestion}</p>
                       </div>
                     )}
@@ -364,9 +375,9 @@ export default function GrowthTab({
                   </p>
                   <button
                     onClick={() => setDigestExpanded((e) => !e)}
-                    className="text-[10px] text-muted hover:text-text transition-colors"
+                    className="flex items-center gap-1 text-[10px] text-muted hover:text-text transition-colors"
                   >
-                    {digestExpanded ? "↑ less" : "↓ full digest"}
+                    {digestExpanded ? <><ChevronUp size={11} strokeWidth={2} /> less</> : <><ChevronDown size={11} strokeWidth={2} /> full digest</>}
                   </button>
                 </div>
               </div>
@@ -378,14 +389,16 @@ export default function GrowthTab({
       {/* Stats row */}
       <div className="grid grid-cols-4 gap-3">
         {[
-          { label: "today",   value: todayCount,        color: "text-amber"  },
-          { label: "7 days",  value: thisWeek,           color: "text-blue"   },
-          { label: "30 days", value: thisMonth,          color: "text-green"  },
-          { label: "streak",  value: `${streak}d`,      color: "text-purple" },
-        ].map(({ label, value, color }) => (
+          { Icon: Sun,           label: "today",   value: todayCount,   color: "text-amber"  },
+          { Icon: CalendarRange, label: "7 days",  value: thisWeek,     color: "text-blue"   },
+          { Icon: CalendarDays,  label: "30 days", value: thisMonth,    color: "text-green"  },
+          { Icon: Flame,         label: "streak",  value: `${streak}d`, color: "text-purple" },
+        ].map(({ Icon, label, value, color }) => (
           <div key={label} className="bg-surface terminal-border rounded-lg p-3 text-center">
             <p className={`text-xl font-bold ${color}`}>{value}</p>
-            <p className="text-xs text-muted mt-0.5">{label}</p>
+            <p className="text-xs text-muted mt-0.5 flex items-center justify-center gap-1">
+              <Icon size={11} className={`${color} opacity-70 hidden sm:block`} strokeWidth={2} />{label}
+            </p>
           </div>
         ))}
       </div>
@@ -393,15 +406,15 @@ export default function GrowthTab({
       {/* Heatmap */}
       <div className="bg-surface terminal-border rounded-lg p-4">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-xs text-amber">// activity</p>
+          <p className="text-xs text-amber flex items-center gap-1.5"><LayoutGrid size={12} strokeWidth={1.75} /> activity</p>
           <div className="flex items-center gap-2">
             {heatmapView === "month" && (
               <div className="flex items-center gap-1">
-                <button onClick={() => setMonthOffset((o) => o - 1)} className="text-muted hover:text-text text-xs px-1">◂</button>
+                <button onClick={() => setMonthOffset((o) => o - 1)} className="text-muted hover:text-text px-1 flex items-center"><ChevronLeft size={14} strokeWidth={2} /></button>
                 <span className="text-xs text-muted w-20 text-center">
                   {monthDate.toLocaleString("en", { month: "short", year: "numeric" })}
                 </span>
-                <button onClick={() => setMonthOffset((o) => Math.min(0, o + 1))} className="text-muted hover:text-text text-xs px-1">▸</button>
+                <button onClick={() => setMonthOffset((o) => Math.min(0, o + 1))} className="text-muted hover:text-text px-1 flex items-center"><ChevronRight size={14} strokeWidth={2} /></button>
               </div>
             )}
             {heatmapView === "year" && (
@@ -517,11 +530,11 @@ export default function GrowthTab({
       {/* Spaced repetition */}
       <div className="bg-surface terminal-border rounded-lg overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <p className="text-xs text-muted">// review queue</p>
+          <p className="text-xs text-muted flex items-center gap-1.5"><RotateCw size={12} strokeWidth={1.75} /> review queue</p>
           <span className="text-xs text-purple">{reviewQueue.length} due</span>
         </div>
         {reviewQueue.length === 0 ? (
-          <p className="text-xs text-muted py-6 text-center">all caught up — check back tomorrow</p>
+          <p className="text-xs text-muted py-6 text-center flex items-center justify-center gap-1.5"><CheckCircle2 size={13} className="text-green" strokeWidth={2} /> all caught up — check back tomorrow</p>
         ) : (
           <div className="divide-y divide-border">
             {reviewQueue.map((c) => {
@@ -537,25 +550,23 @@ export default function GrowthTab({
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className={`text-[10px] shrink-0 ${c.type === "Learning" ? "text-purple" : "text-amber"}`}>
-                          [{c.type}]
-                        </span>
+                        <TypeIcon type={c.type} size={12} className="shrink-0" />
                         <span className="text-sm text-text truncate">{c.title}</span>
                       </div>
                       {!expanded && (
                         <p className="text-xs text-muted leading-relaxed line-clamp-2">{c.text}</p>
                       )}
-                      <p className="text-[10px] text-muted mt-1">
+                      <p className="text-[10px] text-muted mt-1 flex items-center gap-1">
                         {daysSince === null ? "never reviewed" : `reviewed ${daysSince}d ago`}
-                        <span className="ml-2">{expanded ? "▴" : "▾"}</span>
+                        {expanded ? <ChevronUp size={11} strokeWidth={2} /> : <ChevronDown size={11} strokeWidth={2} />}
                       </p>
                     </div>
                     {!expanded && (
                       <button
                         onClick={(e) => { e.stopPropagation(); markReviewed(c.id); }}
-                        className="shrink-0 text-xs px-3 py-1 border border-purple/40 text-purple rounded hover:bg-purple/10 transition-colors mt-0.5"
+                        className="shrink-0 flex items-center gap-1 text-xs px-3 py-1 border border-purple/40 text-purple rounded hover:bg-purple/10 transition-colors mt-0.5"
                       >
-                        done ✓
+                        done <Check size={11} strokeWidth={2.25} />
                       </button>
                     )}
                   </div>
@@ -572,9 +583,9 @@ export default function GrowthTab({
                         </div>
                         <button
                           onClick={() => markReviewed(c.id)}
-                          className="text-xs px-3 py-1 border border-purple/40 text-purple rounded hover:bg-purple/10 transition-colors"
+                          className="flex items-center gap-1 text-xs px-3 py-1 border border-purple/40 text-purple rounded hover:bg-purple/10 transition-colors"
                         >
-                          done ✓
+                          done <Check size={11} strokeWidth={2.25} />
                         </button>
                       </div>
                     </div>
@@ -589,12 +600,15 @@ export default function GrowthTab({
       {/* Task manager */}
       <div className="bg-surface terminal-border rounded-lg overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <p className="text-xs text-muted">// open tasks</p>
+          <p className="text-xs text-muted flex items-center gap-1.5"><ListTodo size={12} strokeWidth={1.75} /> open tasks</p>
           <span className="text-xs text-green">{tasks.length} pending</span>
         </div>
 
         {tasks.length === 0 ? (
-          <p className="text-xs text-muted py-6 text-center">no open tasks — add one in capture tab</p>
+          <div className="flex flex-col items-center gap-2 py-6 text-muted">
+            <Inbox size={20} strokeWidth={1.5} />
+            <p className="text-xs">no open tasks — add one in capture tab</p>
+          </div>
         ) : (
           <div className="divide-y divide-border">
             {tasks.map((task) => (
@@ -686,9 +700,9 @@ function TaskRow({
           disabled={completing}
           className={`mt-0.5 w-4 h-4 shrink-0 rounded border transition-colors ${
             confirm ? "border-green bg-green/20 text-green" : "border-border hover:border-green"
-          } flex items-center justify-center text-xs`}
+          } flex items-center justify-center`}
         >
-          {confirm && "✓"}
+          {confirm && <Check size={11} strokeWidth={3} />}
         </button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-0.5">
@@ -713,7 +727,7 @@ function TaskRow({
             <span className="text-muted">{task.project}</span>
             <span className="text-muted">{age === 0 ? "today" : age === 1 ? "yesterday" : `${age}d ago`}</span>
             {due && <span className={due.color}>{due.label}</span>}
-            <span className="text-muted">{expanded ? "▴" : "▾"}</span>
+            <span className="text-muted flex items-center">{expanded ? <ChevronUp size={11} strokeWidth={2} /> : <ChevronDown size={11} strokeWidth={2} />}</span>
           </div>
         </div>
         {confirm && (
@@ -735,10 +749,10 @@ function TaskRow({
                   className="flex items-start gap-2 cursor-pointer group"
                   onClick={(e) => handleSubtaskToggle(e, st.idx)}
                 >
-                  <div className={`mt-0.5 w-3.5 h-3.5 shrink-0 rounded border flex items-center justify-center text-[10px] transition-colors ${
+                  <div className={`mt-0.5 w-3.5 h-3.5 shrink-0 rounded border flex items-center justify-center transition-colors ${
                     st.done ? "border-green bg-green/20 text-green" : "border-border group-hover:border-green"
                   }`}>
-                    {st.done && "✓"}
+                    {st.done && <Check size={9} strokeWidth={3} />}
                   </div>
                   <p className={`text-xs leading-snug ${st.done ? "line-through text-muted" : "text-text"}`}>
                     {st.text}

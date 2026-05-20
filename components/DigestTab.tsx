@@ -2,6 +2,10 @@
 
 import { useState, useEffect } from "react";
 import type { Capture } from "./BrainClient";
+import {
+  Tags, Waves, Square, Eye, ArrowRight, Clock,
+  ChevronDown, ChevronUp, Inbox, Sparkles, Loader2,
+} from "lucide-react";
 
 type DigestData = {
   themes: string[];
@@ -38,7 +42,7 @@ function DigestView({ digest, generatedAt }: { digest: DigestData; generatedAt: 
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="bg-surface terminal-border rounded-lg p-4">
-        <p className="text-xs text-muted mb-3">// recurring themes</p>
+        <p className="text-xs text-muted mb-3 flex items-center gap-1.5"><Tags size={12} strokeWidth={1.75} /> recurring themes</p>
         <div className="flex flex-wrap gap-2">
           {digest.themes.map((theme, i) => (
             <span key={i} className="text-xs px-3 py-1 rounded-full border border-amber/30 text-amber bg-amber/5">
@@ -49,19 +53,19 @@ function DigestView({ digest, generatedAt }: { digest: DigestData; generatedAt: 
       </div>
 
       <div className="bg-surface terminal-border rounded-lg p-4">
-        <p className="text-xs text-muted mb-2">// patterns noticed</p>
+        <p className="text-xs text-muted mb-2 flex items-center gap-1.5"><Waves size={12} strokeWidth={1.75} /> patterns noticed</p>
         <p className="text-sm text-text leading-relaxed">{digest.patterns}</p>
       </div>
 
       {digest.pendingTasks?.length > 0 && (
         <div className="bg-surface terminal-border rounded-lg p-4">
-          <p className="text-xs text-muted mb-3">
-            // pending tasks <span className="text-green">{digest.pendingTasks.length}</span>
+          <p className="text-xs text-muted mb-3 flex items-center gap-1.5">
+            <Square size={12} strokeWidth={1.75} /> pending tasks <span className="text-green">{digest.pendingTasks.length}</span>
           </p>
           <div className="space-y-2">
             {digest.pendingTasks.map((t) => (
               <div key={t.id} className="flex items-center gap-2">
-                <span className="text-green text-xs shrink-0">□</span>
+                <Square size={12} className="text-green shrink-0" strokeWidth={1.75} />
                 <span className="text-xs text-text">{t.title}</span>
               </div>
             ))}
@@ -71,13 +75,13 @@ function DigestView({ digest, generatedAt }: { digest: DigestData; generatedAt: 
 
       {digest.forgottenIdeas?.length > 0 && (
         <div className="bg-surface terminal-border rounded-lg p-4">
-          <p className="text-xs text-muted mb-3">
-            // worth revisiting <span className="text-purple">{digest.forgottenIdeas.length}</span>
+          <p className="text-xs text-muted mb-3 flex items-center gap-1.5">
+            <Eye size={12} strokeWidth={1.75} /> worth revisiting <span className="text-purple">{digest.forgottenIdeas.length}</span>
           </p>
           <div className="space-y-2">
             {digest.forgottenIdeas.map((idea) => (
               <div key={idea.id} className="flex items-center gap-2">
-                <span className="text-purple text-xs shrink-0">◈</span>
+                <Eye size={12} className="text-purple shrink-0" strokeWidth={1.75} />
                 <span className="text-xs text-text">{idea.title}</span>
               </div>
             ))}
@@ -86,11 +90,11 @@ function DigestView({ digest, generatedAt }: { digest: DigestData; generatedAt: 
       )}
 
       <div className="bg-surface border border-blue/20 rounded-lg p-4">
-        <p className="text-xs text-blue mb-2">// suggested next action</p>
+        <p className="text-xs text-blue mb-2 flex items-center gap-1.5"><ArrowRight size={12} strokeWidth={2} /> suggested next action</p>
         <p className="text-sm text-text leading-relaxed">{digest.suggestion}</p>
       </div>
 
-      <p className="text-xs text-muted text-center">generated {timeAgo(generatedAt)}</p>
+      <p className="text-xs text-muted text-center flex items-center justify-center gap-1.5"><Clock size={11} strokeWidth={1.75} /> generated {timeAgo(generatedAt)}</p>
     </div>
   );
 }
@@ -152,7 +156,9 @@ export default function DigestTab({
       <div className="bg-surface terminal-border rounded-lg p-4">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-sm text-text font-bold">daily digest</h2>
+            <h2 className="text-sm text-text font-bold flex items-center gap-1.5">
+              <Sparkles size={14} className="text-amber" strokeWidth={2} /> daily digest
+            </h2>
             <p className="text-xs text-muted mt-0.5">
               {captures.length} captures · AI synthesis
             </p>
@@ -160,8 +166,9 @@ export default function DigestTab({
           <button
             onClick={generate}
             disabled={loading || captures.length === 0}
-            className="text-xs px-4 py-2 bg-amber text-bg rounded font-bold hover:bg-yellow-400 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 text-xs px-4 py-2 bg-amber text-bg rounded font-bold hover:bg-yellow-400 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           >
+            {loading ? <Loader2 size={12} className="animate-spin" strokeWidth={2.5} /> : null}
             {loading ? "analyzing..." : latest ? "regenerate()" : "generate()"}
           </button>
         </div>
@@ -215,8 +222,8 @@ export default function DigestTab({
             onClick={() => setHistoryOpen((o) => !o)}
             className="w-full flex items-center justify-between px-4 py-3 text-xs text-muted hover:text-text transition-colors"
           >
-            <span>// history ({records.length} digests)</span>
-            <span>{historyOpen ? "▴" : "▾"}</span>
+            <span>history ({records.length} digests)</span>
+            {historyOpen ? <ChevronUp size={13} strokeWidth={2} /> : <ChevronDown size={13} strokeWidth={2} />}
           </button>
           {historyOpen && (
             <div className="border-t border-border divide-y divide-border">
@@ -253,9 +260,12 @@ export default function DigestTab({
       {!loading && shown && <DigestView digest={shown.content} generatedAt={shown.created_at} />}
 
       {!loading && !fetching && records.length === 0 && (
-        <p className="text-xs text-muted py-8 text-center">
-          {captures.length === 0 ? "add some captures first" : "tap generate() to analyze your knowledge base"}
-        </p>
+        <div className="flex flex-col items-center gap-2 py-8 text-muted">
+          <Inbox size={20} strokeWidth={1.5} />
+          <p className="text-xs">
+            {captures.length === 0 ? "add some captures first" : "tap generate() to analyze your knowledge base"}
+          </p>
+        </div>
       )}
     </div>
   );

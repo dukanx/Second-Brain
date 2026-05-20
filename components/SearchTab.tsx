@@ -2,8 +2,9 @@
 
 import { useState, useRef } from "react";
 import type { Capture, Project } from "./BrainClient";
-import { TYPE_COLORS } from "./BrainClient";
+import { TypeIcon } from "./BrainClient";
 import CaptureDetailModal from "./CaptureDetailModal";
+import { Search, Sparkles, FileText, CornerDownRight, Loader2, Inbox, MessageSquare } from "lucide-react";
 
 type SearchResult = {
   synthesis: string;
@@ -69,7 +70,7 @@ export default function SearchTab({
       {/* Search input */}
       <div className="bg-surface terminal-border rounded-lg overflow-hidden">
         <div className="flex items-center px-4 py-3 gap-3">
-          <span className="text-blue text-sm shrink-0">⟩</span>
+          <Search size={14} className="text-blue shrink-0" strokeWidth={2} />
           <input
             ref={inputRef}
             type="text"
@@ -87,8 +88,9 @@ export default function SearchTab({
           <button
             onClick={() => search()}
             disabled={!query.trim() || loading}
-            className="text-xs px-4 py-1.5 border border-blue text-blue rounded hover:bg-blue hover:text-bg active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 text-xs px-4 py-1.5 border border-blue text-blue rounded hover:bg-blue hover:text-bg active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           >
+            {loading ? <Loader2 size={12} className="animate-spin" strokeWidth={2} /> : <Search size={12} strokeWidth={2} />}
             {loading ? "thinking..." : "search()"}
           </button>
         </div>
@@ -98,7 +100,7 @@ export default function SearchTab({
       {loading && (
         <div className="space-y-2">
           <div className="text-xs text-blue animate-pulse-slow flex items-center gap-2">
-            <span>▸</span>
+            <Loader2 size={12} className="animate-spin" strokeWidth={2} />
             <span>synthesizing from {captures.length} captures...</span>
           </div>
           <div className="h-px bg-gradient-to-r from-blue/20 via-purple/20 to-transparent animate-pulse" />
@@ -116,7 +118,10 @@ export default function SearchTab({
         <div className="space-y-5 animate-fade-in">
           <div className="bg-surface terminal-border rounded-lg overflow-hidden">
             <div className="px-4 py-2 border-b border-border">
-              <span className="text-blue text-xs">synthesis</span>
+              <span className="text-blue text-xs flex items-center gap-1.5">
+                <Sparkles size={12} strokeWidth={2} />
+                synthesis
+              </span>
             </div>
             <div className="px-4 py-4">
               <p className="text-sm text-text leading-relaxed whitespace-pre-wrap">
@@ -127,8 +132,9 @@ export default function SearchTab({
 
           {result.relevantCaptures.length > 0 && (
             <div>
-              <p className="text-xs text-muted mb-3">
-                // relevant captures ({result.relevantCaptures.length})
+              <p className="text-xs text-muted mb-3 flex items-center gap-1.5">
+                <FileText size={12} strokeWidth={1.75} />
+                relevant captures ({result.relevantCaptures.length})
               </p>
               <div className="space-y-2">
                 {result.relevantCaptures.map((capture) => (
@@ -138,9 +144,7 @@ export default function SearchTab({
                     onClick={() => setModalCapture(capture)}
                   >
                     <div className="flex items-start gap-2 mb-1 flex-wrap">
-                      <span className={`text-xs shrink-0 ${TYPE_COLORS[capture.type] ?? "text-muted"}`}>
-                        [{capture.type}]
-                      </span>
+                      <TypeIcon type={capture.type} size={13} className="shrink-0 mt-0.5" />
                       <span className="text-xs text-text font-semibold flex-1 min-w-0">
                         {capture.title}
                       </span>
@@ -155,7 +159,10 @@ export default function SearchTab({
 
           {result.followUpQuestions.length > 0 && (
             <div>
-              <p className="text-xs text-muted mb-3">// follow-up questions</p>
+              <p className="text-xs text-muted mb-3 flex items-center gap-1.5">
+                <CornerDownRight size={12} strokeWidth={1.75} />
+                follow-up questions
+              </p>
               <div className="space-y-2">
                 {result.followUpQuestions.map((q, i) => (
                   <button
@@ -174,11 +181,19 @@ export default function SearchTab({
       )}
 
       {!result && !loading && (
-        <p className="text-xs text-muted py-8 text-center">
-          {captures.length === 0
-            ? "add some captures first"
-            : `${captures.length} captures indexed — ask anything`}
-        </p>
+        <div className="flex flex-col items-center gap-2 py-8 text-muted">
+          {captures.length === 0 ? (
+            <>
+              <Inbox size={20} strokeWidth={1.5} />
+              <p className="text-xs">add some captures first</p>
+            </>
+          ) : (
+            <>
+              <MessageSquare size={20} strokeWidth={1.5} />
+              <p className="text-xs">{captures.length} captures indexed — ask anything</p>
+            </>
+          )}
+        </div>
       )}
     </div>
   );
