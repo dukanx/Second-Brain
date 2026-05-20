@@ -46,11 +46,14 @@ export async function POST() {
     model: "claude-sonnet-4-6",
     max_tokens: 2048,
     system: `You are a personal knowledge analyst. Analyze the captures and return ONLY valid JSON with these exact fields (keep strings SHORT):
-- themes: string[] — 4-5 short phrases (max 4 words each)
+- themes: string[] — 3-4 short phrases (max 4 words each)
+- momentum: "high" | "medium" | "low" — based on recency, quantity, and variety
+- highlights: string[] — 3-4 most notable recent captures or patterns (max 10 words each)
+- insight: string — one key observation about current focus (max 2 sentences)
+- patterns: string — broader patterns across all captures (max 2 sentences)
 - pendingTasks: {id:string,title:string}[] — up to 5 Task captures needing attention; use the full UUID from the original data
 - forgottenIdeas: {id:string,title:string}[] — up to 4 older Idea/Learning captures worth revisiting; use the full UUID
-- patterns: string — max 2 sentences
-- suggestion: string — max 1 sentence, actionable
+- suggestion: string — max 1 sentence, actionable next step
 
 Return ONLY the JSON object. Keep all strings concise.`,
     messages: [{ role: "user", content: catalogue }],

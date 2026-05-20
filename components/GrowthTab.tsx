@@ -105,36 +105,42 @@ export default function GrowthTab({
   const [expandedReviewId, setExpandedReviewId] = useState<string | null>(null);
   const heatmapScrollRef = useRef<HTMLDivElement>(null);
 
-  type WeeklySummary = {
-    highlights: string[];
+  type DigestData = {
     themes: string[];
-    insight: string;
-    momentum: "high" | "medium" | "low";
+    momentum?: "high" | "medium" | "low";
+    highlights?: string[];
+    insight?: string;
+    patterns?: string;
+    pendingTasks?: { id: string; title: string }[];
+    forgottenIdeas?: { id: string; title: string }[];
+    suggestion?: string;
   };
-  type WeeklyRecord = { content: WeeklySummary; created_at: string; week_start: string };
-  const [weeklies, setWeeklies] = useState<WeeklyRecord[]>([]);
-  const [weeklyGenerating, setWeeklyGenerating] = useState(false);
-  const [selectedWeek, setSelectedWeek] = useState(0);
-  const [weeklyHistoryOpen, setWeeklyHistoryOpen] = useState(false);
+  type DigestRecord = { id: string; content: DigestData; created_at: string };
+  const [digests, setDigests] = useState<DigestRecord[]>([]);
+  const [digestGenerating, setDigestGenerating] = useState(false);
+  const [selectedDigest, setSelectedDigest] = useState(0);
+  const [digestHistoryOpen, setDigestHistoryOpen] = useState(false);
+  const [digestExpanded, setDigestExpanded] = useState(false);
 
   useEffect(() => {
-    fetch("/api/summary/weekly")
+    fetch("/api/digest")
       .then((r) => r.json())
-      .then((d) => { if (d.summaries?.length) setWeeklies(d.summaries); });
+      .then((d) => { if (d.digests?.length) setDigests(d.digests); });
   }, []);
 
-  async function generateWeekly() {
-    setWeeklyGenerating(true);
+  async function generateDigest() {
+    setDigestGenerating(true);
     try {
-      const res = await fetch("/api/summary/weekly", { method: "POST" });
+      const res = await fetch("/api/digest", { method: "POST" });
       const d = await res.json();
-      if (d.summary) {
-        const rec: WeeklyRecord = { content: d.summary, created_at: d.generatedAt, week_start: d.generatedAt.slice(0, 10) };
-        setWeeklies((prev) => [rec, ...prev.filter((w) => w.week_start !== rec.week_start)]);
-        setSelectedWeek(0);
+      if (d.themes) {
+        const rec: DigestRecord = { id: crypto.randomUUID(), content: d, created_at: d.generatedAt };
+        setDigests((prev) => [rec, ...prev]);
+        setSelectedDigest(0);
+        setDigestExpanded(false);
       }
     } finally {
-      setWeeklyGenerating(false);
+      setDigestGenerating(false);
     }
   }
 
@@ -227,83 +233,142 @@ export default function GrowthTab({
 
   return (
     <div className="space-y-5 animate-fade-in">
-      {/* Weekly summary */}
+      {/* Digest */}
       {(() => {
-        const shown = weeklies[selectedWeek];
+        const shown = digests[selectedDigest];
+        const d = shown?.content;
         return (
           <div className="bg-surface terminal-border rounded-lg overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <p className="text-xs text-muted">// weekly summary</p>
+              <p className="text-xs text-muted">// digest</p>
               <div className="flex items-center gap-2">
-                {weeklies.length > 1 && (
+                {digests.length > 1 && (
                   <button
-                    onClick={() => setWeeklyHistoryOpen((o) => !o)}
+                    onClick={() => setDigestHistoryOpen((o) => !o)}
                     className="text-[10px] text-muted hover:text-text border border-border rounded px-2 py-0.5 transition-colors"
                   >
-                    history ({weeklies.length}) {weeklyHistoryOpen ? "▴" : "▾"}
+                    history ({digests.length}) {digestHistoryOpen ? "▴" : "▾"}
                   </button>
                 )}
                 <button
-                  onClick={generateWeekly}
-                  disabled={weeklyGenerating}
+                  onClick={generateDigest}
+                  disabled={digestGenerating}
                   className="text-xs text-muted hover:text-purple border border-border hover:border-purple rounded px-2 py-0.5 transition-colors disabled:opacity-40"
                 >
-                  {weeklyGenerating ? "generating..." : shown ? "regenerate" : "generate"}
+                  {digestGenerating ? "analyzing..." : shown ? "regenerate" : "generate"}
                 </button>
               </div>
             </div>
 
-            {weeklyHistoryOpen && weeklies.length > 1 && (
+            {digestHistoryOpen && digests.length > 1 && (
               <div className="border-b border-border divide-y divide-border">
-                {weeklies.map((w, i) => (
+                {digests.map((r, i) => (
                   <button
-                    key={w.week_start}
-                    onClick={() => { setSelectedWeek(i); setWeeklyHistoryOpen(false); }}
+                    key={r.id}
+                    onClick={() => { setSelectedDigest(i); setDigestHistoryOpen(false); setDigestExpanded(false); }}
                     className={`w-full text-left px-4 py-2 text-xs flex items-center justify-between transition-colors ${
-                      selectedWeek === i ? "text-purple" : "text-muted hover:text-text"
+                      selectedDigest === i ? "text-purple" : "text-muted hover:text-text"
                     }`}
                   >
-                    <span>week of {new Date(w.week_start + "T12:00:00").toLocaleDateString("en", { day: "2-digit", month: "short" })}</span>
-                    <span>{w.content.momentum} momentum</span>
+                    <span>{new Date(r.created_at).toLocaleDateString("sr", { day: "2-digit", month: "2-digit", year: "2-digit" })}</span>
+                    {r.content.momentum && <span>{r.content.momentum} momentum</span>}
                   </button>
                 ))}
               </div>
             )}
 
-            {!shown && !weeklyGenerating && (
-              <p className="text-xs text-muted py-6 text-center">generate your weekly summary</p>
+            {!shown && !digestGenerating && (
+              <p className="text-xs text-muted py-6 text-center">generate your digest</p>
             )}
-            {weeklyGenerating && (
-              <p className="text-xs text-muted py-6 text-center animate-pulse">analyzing this week...</p>
+            {digestGenerating && (
+              <p className="text-xs text-muted py-6 text-center animate-pulse">analyzing your knowledge base...</p>
             )}
-            {shown && !weeklyGenerating && (
+            {shown && !digestGenerating && (
               <div className="p-4 space-y-3 animate-fade-in">
+                {/* Collapsed: momentum + themes + highlights + insight */}
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`text-xs px-2 py-0.5 rounded border ${
-                    shown.content.momentum === "high"   ? "border-green/40 text-green bg-green/10" :
-                    shown.content.momentum === "medium" ? "border-amber/40 text-amber bg-amber/10" :
-                                                          "border-muted/40 text-muted"
-                  }`}>
-                    {shown.content.momentum} momentum
-                  </span>
-                  {shown.content.themes.map((t) => (
+                  {d.momentum && (
+                    <span className={`text-xs px-2 py-0.5 rounded border ${
+                      d.momentum === "high"   ? "border-green/40 text-green bg-green/10" :
+                      d.momentum === "medium" ? "border-amber/40 text-amber bg-amber/10" :
+                                                "border-muted/40 text-muted"
+                    }`}>
+                      {d.momentum} momentum
+                    </span>
+                  )}
+                  {d.themes.map((t) => (
                     <span key={t} className="text-xs px-2 py-0.5 rounded border border-purple/30 text-purple bg-purple/10">{t}</span>
                   ))}
                 </div>
-                <ul className="space-y-1">
-                  {shown.content.highlights.map((h) => (
-                    <li key={h} className="text-xs text-muted flex gap-2">
-                      <span className="text-amber shrink-0">→</span>
-                      <span>{h}</span>
-                    </li>
-                  ))}
-                </ul>
-                <p className="text-xs text-text/70 border-l-2 border-purple/40 pl-3 leading-relaxed">
-                  {shown.content.insight}
-                </p>
-                <p className="text-[10px] text-muted text-right">
-                  {new Date(shown.created_at).toLocaleDateString("sr", { day: "2-digit", month: "2-digit", year: "2-digit" })}
-                </p>
+                {d.highlights && d.highlights.length > 0 && (
+                  <ul className="space-y-1">
+                    {d.highlights.map((h) => (
+                      <li key={h} className="text-xs text-muted flex gap-2">
+                        <span className="text-amber shrink-0">→</span>
+                        <span>{h}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {d.insight && (
+                  <p className="text-xs text-text/70 border-l-2 border-purple/40 pl-3 leading-relaxed">{d.insight}</p>
+                )}
+
+                {/* Expanded: patterns + tasks + ideas + suggestion */}
+                {digestExpanded && (
+                  <div className="space-y-3 pt-2 border-t border-border animate-fade-in">
+                    {d.patterns && (
+                      <div>
+                        <p className="text-[10px] text-muted mb-1">// patterns</p>
+                        <p className="text-xs text-text leading-relaxed">{d.patterns}</p>
+                      </div>
+                    )}
+                    {d.pendingTasks && d.pendingTasks.length > 0 && (
+                      <div>
+                        <p className="text-[10px] text-muted mb-2">// pending tasks</p>
+                        <div className="space-y-1">
+                          {d.pendingTasks.map((t) => (
+                            <div key={t.id} className="flex items-center gap-2">
+                              <span className="text-green text-xs shrink-0">□</span>
+                              <span className="text-xs text-text">{t.title}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {d.forgottenIdeas && d.forgottenIdeas.length > 0 && (
+                      <div>
+                        <p className="text-[10px] text-muted mb-2">// worth revisiting</p>
+                        <div className="space-y-1">
+                          {d.forgottenIdeas.map((idea) => (
+                            <div key={idea.id} className="flex items-center gap-2">
+                              <span className="text-purple text-xs shrink-0">◈</span>
+                              <span className="text-xs text-text">{idea.title}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {d.suggestion && (
+                      <div className="border border-blue/20 rounded p-3">
+                        <p className="text-[10px] text-blue mb-1">// suggested next action</p>
+                        <p className="text-xs text-text leading-relaxed">{d.suggestion}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between pt-1">
+                  <p className="text-[10px] text-muted">
+                    {new Date(shown.created_at).toLocaleDateString("sr", { day: "2-digit", month: "2-digit", year: "2-digit" })}
+                  </p>
+                  <button
+                    onClick={() => setDigestExpanded((e) => !e)}
+                    className="text-[10px] text-muted hover:text-text transition-colors"
+                  >
+                    {digestExpanded ? "↑ less" : "↓ full digest"}
+                  </button>
+                </div>
               </div>
             )}
           </div>

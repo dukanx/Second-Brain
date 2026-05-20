@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import CaptureTab from "./CaptureTab";
 import SearchTab from "./SearchTab";
 import GraphTab from "./GraphTab";
-import DigestTab from "./DigestTab";
 import GrowthTab from "./GrowthTab";
 import ChatTab from "./ChatTab";
 import ArchitectureTab from "./ArchitectureTab";
@@ -35,7 +34,7 @@ export type Project = {
   color: string;
 };
 
-type Tab = "capture" | "search" | "graph" | "digest" | "grow" | "chat" | "arch";
+type Tab = "capture" | "search" | "graph" | "grow" | "chat" | "arch";
 
 const TYPE_COLORS: Record<string, string> = {
   Idea: "text-amber",
@@ -51,7 +50,6 @@ const TABS: { id: Tab; label: string; icon: string; activeColor: string; desktop
   { id: "capture", label: "capture", icon: "✦", activeColor: "text-amber"  },
   { id: "search",  label: "search",  icon: "⌕", activeColor: "text-blue"   },
   { id: "graph",   label: "graph",   icon: "◉", activeColor: "text-green"  },
-  { id: "digest",  label: "digest",  icon: "◈", activeColor: "text-purple" },
   { id: "grow",    label: "grow",    icon: "✺", activeColor: "text-green"  },
   { id: "chat",    label: "chat",    icon: "◇", activeColor: "text-purple" },
   { id: "arch",    label: "arch",    icon: "⬡", activeColor: "text-muted", desktopOnly: true },
@@ -309,7 +307,6 @@ export default function BrainClient({
         {tab === "capture" && <CaptureTab captures={captures} setCaptures={setCaptures} projects={projects} onProjectCreated={handleProjectCreated} onChatAbout={(id) => { setReviewId(id); setTab("chat"); }} />}
         {tab === "search"  && <SearchTab  captures={captures} setCaptures={setCaptures} projects={projects} />}
         {tab === "graph"   && <GraphTab   captures={captures} projects={projects} setCaptures={setCaptures} onRelatesUpdated={refreshCaptures} />}
-        {tab === "digest"  && <DigestTab  captures={captures} userId={user.id} />}
         {tab === "grow"    && <GrowthTab  captures={captures} setCaptures={setCaptures} taskId={taskId} />}
         {tab === "chat"    && <ChatTab    captures={captures} pinnedCapture={reviewId ? captures.find((c) => c.id === reviewId) ?? null : null} onMarkReviewed={markReviewed} />}
         {tab === "arch"    && <ArchitectureTab />}
