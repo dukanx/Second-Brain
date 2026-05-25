@@ -5,43 +5,39 @@ import { NextResponse } from "next/server";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-function getWeekStart(): string {
-  const d = new Date();
-  const day = d.getDay();
-  d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
-  return d.toISOString().slice(0, 10);
-}
-
-async function generateWeeklySummary(supabase: Awaited<ReturnType<typeof createServiceClient>>, user_id: string): Promise<string | null> {
-  const weekStart = getWeekStart();
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekEnd.getDate() + 7);
-
+async function generateAndSaveDigest(supabase: Awaited<ReturnType<typeof createServiceClient>>, user_id: string): Promise<string | null> {
   const { data: captures } = await supabase
     .from("captures")
-    .select("title, text, type, project")
+    .select("id, title, text, type, project, created_at, last_reviewed_at")
     .eq("user_id", user_id)
-    .gte("created_at", new Date(new Date(weekStart).getTime() - 7 * 86400_000).toISOString().slice(0, 10))
-    .lt("created_at", weekStart)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: false })
+    .limit(80);
 
   if (!captures?.length) return null;
 
-  const catalogue = captures
-    .map((c) => `[${c.type}][${c.project}] ${c.title}: ${c.text.slice(0, 80)}`)
-    .join("\n");
+  const catalogue = captures.map((c) => {
+    const age = Math.floor((Date.now() - new Date(c.created_at).getTime()) / 86400000);
+    const reviewed = c.last_reviewed_at
+      ? `reviewed:${Math.floor((Date.now() - new Date(c.last_reviewed_at).getTime()) / 86400000)}d ago`
+      : "never reviewed";
+    return `${c.id}|${c.type}|${c.project}|${age}d|${reviewed}| ${c.title}: ${c.text.slice(0, 70)}`;
+  }).join("\n");
 
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 1024,
-    system: `You are a personal knowledge analyst. Analyze this week's captures and return ONLY valid JSON:
-- highlights: string[] — 3-4 most notable things captured (max 10 words each)
-- themes: string[] — 2-3 main themes (max 4 words each)
-- insight: string — one key observation about this week (max 2 sentences)
-- momentum: "high" | "medium" | "low" — based on quantity and variety of captures
+    max_tokens: 2048,
+    system: `You are a personal knowledge analyst. Analyze the captures and return ONLY valid JSON:
+- themes: string[] — 3-4 short phrases (max 4 words each)
+- momentum: "high" | "medium" | "low"
+- highlights: string[] — 3-4 most notable recent captures (max 10 words each)
+- insight: string — one key observation (max 2 sentences)
+- patterns: string — broader patterns (max 2 sentences)
+- pendingTasks: {id:string,title:string}[] — up to 5 Task captures needing attention
+- forgottenIdeas: {id:string,title:string}[] — up to 4 older never/rarely reviewed Idea/Learning captures
+- suggestion: string — max 1 sentence, actionable
 
-Return ONLY the JSON object. Keep all strings short.`,
-    messages: [{ role: "user", content: `${captures.length} captures last week:\n${catalogue}` }],
+Return ONLY the JSON object.`,
+    messages: [{ role: "user", content: catalogue }],
   });
 
   const content = message.content[0];
@@ -50,11 +46,7 @@ Return ONLY the JSON object. Keep all strings short.`,
 
   try {
     const parsed = JSON.parse(raw);
-    // Save to summaries table (previous week)
-    const prevWeekStart = new Date(new Date(weekStart).getTime() - 7 * 86400_000).toISOString().slice(0, 10);
-    await supabase
-      .from("summaries")
-      .upsert({ user_id, week_start: prevWeekStart, content: parsed }, { onConflict: "user_id,week_start" });
+    await supabase.from("digests").insert({ user_id, content: { ...parsed, total: captures.length } });
     return parsed.insight ?? null;
   } catch {
     return null;
@@ -105,19 +97,13 @@ export async function GET(request: Request) {
       });
     }
 
-    // Weekly recap (Mondays only) — auto-generate summary and use insight
+    // Weekly digest (Mondays only) — auto-generate and save to digests table
     if (isMonday) {
-      const { count: weekCount } = await supabase
-        .from("captures")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user_id)
-        .gte("created_at", new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10));
-
-      if (weekCount) {
-        const insight = await generateWeeklySummary(supabase, user_id);
+      const insight = await generateAndSaveDigest(supabase, user_id);
+      if (insight) {
         notifications.push({
-          title: `Second Brain — ${weekCount} captures last week`,
-          body: insight ?? "Open app to see your weekly summary",
+          title: "Second Brain — weekly digest ready",
+          body: insight,
         });
       }
     }
