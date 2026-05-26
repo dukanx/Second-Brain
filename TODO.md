@@ -3,8 +3,6 @@
 ## In progress
 _nothing_
 
-## Queue
-- [ ] **Notifications** — browser push for spaced repetition reminders
 
 ## Backlog
 
@@ -12,7 +10,9 @@ _nothing_
 - [ ] **Bulk akcije** — označi više captures, obriši/promeni projekt odjednom
 
 **AI**
-- [ ] **Semantic RAG u chat tabu** — embedding-based search umesto keyword matching
+- [ ] **Structured output** — zameni `JSON.parse` sa Anthropic `tool_use` na svim Claude endpointima (capture, search, relate, summary, digest) → garantovana struktura, nema crash na malformed JSON
+- [ ] **RAG pipeline** — aktiviraj pgvector na Supabase, dodaj `embedding vector(1536)` na captures, generiši embedding pri svakom save-u, zameni keyword scoring u `/api/chat` sa cosine similarity; backfill za postojeće capture-e
+- [ ] **Eval skripta** — 15–20 pitanja + očekivani capture-i (golden dataset), meri precision@1 i precision@3; pokreni na keyword vs. embedding retrievalu da vidiš konkretnu razliku *(radi tek kad RAG bude gotov)*
 - [ ] **Live AI sugestije** — predlaže tip/projekt dok kucaš, pre save
 - [ ] **Summarize capture** — dugme na kartici, AI sažetak jednog capture-a
 
