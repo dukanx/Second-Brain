@@ -275,6 +275,17 @@ export default function BrainClient({
             <Brain size={14} className="text-amber" strokeWidth={2.25} />
             <span className="text-amber font-bold text-sm tracking-tight">second_brain</span>
           </div>
+          {/* Mobile arch entry — desktop reaches it via the [arch] tab below */}
+          <button
+            onClick={() => setTab("arch")}
+            className={`sm:hidden flex items-center transition-colors ${
+              tab === "arch" ? "text-purple" : "text-muted hover:text-text"
+            }`}
+            title="architecture"
+            aria-label="architecture"
+          >
+            <Network size={15} strokeWidth={tab === "arch" ? 2.25 : 1.75} />
+          </button>
           {/* Desktop tabs */}
           <nav className="hidden sm:flex gap-1">
             {TABS.map((t) => (

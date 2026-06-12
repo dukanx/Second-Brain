@@ -76,10 +76,24 @@ export default function LoginPage() {
             </button>
           </div>
 
-          <div className="mt-8 pt-6 border-t border-border">
+          <div className="mt-8 pt-6 border-t border-border space-y-4">
             <p className="text-xs text-muted text-center">
               captures · search · graph · ai synthesis
             </p>
+
+            {/* Visitor note — framing for anyone (e.g. a recruiter) who lands here */}
+            <div className="rounded-md border border-border bg-bg/50 p-3 space-y-2">
+              <p className="text-[11px] text-muted font-mono leading-relaxed">
+                <span className="text-purple">//</span> built for personal use.
+                login is private — but the architecture is open to explore:
+              </p>
+              <a
+                href="/arch"
+                className="flex items-center justify-center gap-2 w-full border border-purple/40 hover:border-purple text-text hover:text-purple font-bold py-2 rounded text-xs font-mono transition-all duration-200"
+              >
+                <span>&gt; explore_architecture()</span>
+              </a>
+            </div>
           </div>
         </div>
       </div>
