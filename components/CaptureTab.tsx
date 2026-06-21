@@ -81,7 +81,15 @@ export default function CaptureTab({
       setDueDate("");
       setPriority("medium");
       setSourceUrl("");
-      textareaRef.current?.focus();
+      // Defer height reset until React has flushed the empty value to the DOM,
+      // otherwise the textarea is still tall from the old content (same reason
+      // addSubtask uses setTimeout(..., 0)).
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.style.height = "";
+          textareaRef.current.focus();
+        }
+      }, 0);
 
       // Relate in background, show feedback
       setRelateStatus("finding connections...");
