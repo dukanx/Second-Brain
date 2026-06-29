@@ -41,11 +41,35 @@ export async function POST(request: Request) {
   try {
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 1024,
-      system: `You are a personal knowledge assistant. Given the user's knowledge captures and a query, synthesize a thoughtful answer drawing from their captures. Return ONLY valid JSON with:
-- synthesis: string (2-4 paragraphs synthesizing insights from the captures relevant to the query)
-- relevantIds: string[] (IDs of the most relevant captures, max 8)
-- followUpQuestions: string[] (3 follow-up questions to deepen understanding)`,
+      max_tokens: 2048,
+      system: `You are a personal knowledge assistant. Given the user's knowledge captures and a query, synthesize a thoughtful answer drawing from their captures. Always respond by calling the answer tool.`,
+      tools: [
+        {
+          name: "answer",
+          description: "Return the synthesized answer to the user's query.",
+          input_schema: {
+            type: "object",
+            properties: {
+              synthesis: {
+                type: "string",
+                description: "2-4 paragraphs synthesizing insights from the captures relevant to the query",
+              },
+              relevantIds: {
+                type: "array",
+                items: { type: "string" },
+                description: "IDs of the most relevant captures, max 8",
+              },
+              followUpQuestions: {
+                type: "array",
+                items: { type: "string" },
+                description: "3 follow-up questions to deepen understanding",
+              },
+            },
+            required: ["synthesis", "relevantIds", "followUpQuestions"],
+          },
+        },
+      ],
+      tool_choice: { type: "tool", name: "answer" },
       messages: [
         {
           role: "user",
@@ -54,10 +78,17 @@ export async function POST(request: Request) {
       ],
     });
 
-    const content = message.content[0];
-    if (content.type === "text") {
-      const raw = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-      const parsed = JSON.parse(raw);
+    if (message.stop_reason === "max_tokens") {
+      throw new Error("response truncated (max_tokens) — try a more specific query");
+    }
+
+    const toolUse = message.content.find((b) => b.type === "tool_use");
+    if (toolUse && toolUse.type === "tool_use") {
+      const parsed = toolUse.input as {
+        synthesis?: string;
+        relevantIds?: string[];
+        followUpQuestions?: string[];
+      };
       synthesis = parsed.synthesis ?? "";
       relevantIds = parsed.relevantIds ?? [];
       followUpQuestions = parsed.followUpQuestions ?? [];
