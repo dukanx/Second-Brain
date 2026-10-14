@@ -53,6 +53,30 @@ Return ONLY the JSON object.`,
   }
 }
 
+// The cron fires twice a day, so the Monday digest must be idempotent: skip it
+// if one was already made in the last 6 days, or if nothing new was captured
+// since the last one (no point paying Claude to summarize the same captures).
+async function shouldGenerateWeeklyDigest(supabase: Awaited<ReturnType<typeof createServiceClient>>, user_id: string): Promise<boolean> {
+  const { data: last } = await supabase
+    .from("digests")
+    .select("created_at")
+    .eq("user_id", user_id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!last) return true;
+  if (Date.now() - new Date(last.created_at).getTime() < 6 * 86400_000) return false;
+
+  const { count } = await supabase
+    .from("captures")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user_id)
+    .gt("created_at", last.created_at);
+
+  return (count ?? 0) > 0;
+}
+
 export async function GET(request: Request) {
   webpush.setVapidDetails(
     process.env.VAPID_EMAIL!,
@@ -76,7 +100,14 @@ export async function GET(request: Request) {
   const isMonday = new Date().getDay() === 1;
   let sent = 0;
 
-  for (const { user_id, subscription } of subs) {
+  // One user can have several subscriptions (phone + laptop). Group them so
+  // per-user work (and the Claude call for the digest) runs once per user.
+  const subsByUser = new Map<string, typeof subs>();
+  for (const sub of subs) {
+    subsByUser.set(sub.user_id, [...(subsByUser.get(sub.user_id) ?? []), sub]);
+  }
+
+  for (const [user_id, userSubs] of subsByUser) {
     const notifications: { title: string; body: string; captureId?: string }[] = [];
 
     // Review reminder (daily) — fetch one random capture to preview
@@ -98,7 +129,7 @@ export async function GET(request: Request) {
     }
 
     // Weekly digest (Mondays only) — auto-generate and save to digests table
-    if (isMonday) {
+    if (isMonday && (await shouldGenerateWeeklyDigest(supabase, user_id))) {
       const insight = await generateAndSaveDigest(supabase, user_id);
       if (insight) {
         notifications.push({
@@ -108,15 +139,17 @@ export async function GET(request: Request) {
       }
     }
 
-    for (const notif of notifications) {
-      try {
-        await webpush.sendNotification(subscription, JSON.stringify(notif));
-        sent++;
-      } catch {
-        await supabase.from("push_subscriptions").delete()
-          .eq("user_id", user_id)
-          .eq("endpoint", subscription.endpoint);
-        break;
+    for (const { subscription } of userSubs) {
+      for (const notif of notifications) {
+        try {
+          await webpush.sendNotification(subscription, JSON.stringify(notif));
+          sent++;
+        } catch {
+          await supabase.from("push_subscriptions").delete()
+            .eq("user_id", user_id)
+            .eq("endpoint", subscription.endpoint);
+          break;
+        }
       }
     }
   }
