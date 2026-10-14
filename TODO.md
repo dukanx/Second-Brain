@@ -1,7 +1,7 @@
 # Second Brain — TODO
 
 ## In progress
-_nothing_
+- [ ] **RAG pipeline** — ✅ pgvector + `match_captures`, ✅ Voyage `voyage-3.5-lite` (1024 dim), ✅ backfill 120/120, ✅ search/chat/relate/relate-batch na vektorima, ✅ relate prag 0.71 (izmeren: LLM-judge na 491 par + ljudska provera 17/20) · ostaje: deploy (`VOYAGE_API_KEY` na Vercel), pokrenuti batch relate jednom, ažurirati ArchitectureTab opis relate-a i chat-a, commit
 
 
 ## Backlog
@@ -10,9 +10,13 @@ _nothing_
 - [ ] **Bulk akcije** — označi više captures, obriši/promeni projekt odjednom
 
 **AI**
-- [ ] **Structured output** — zameni `JSON.parse` sa Anthropic `tool_use` na svim Claude endpointima (capture, search, relate, summary, digest) → garantovana struktura, nema crash na malformed JSON
-- [ ] **RAG pipeline** — aktiviraj pgvector na Supabase, dodaj `embedding vector(1536)` na captures, generiši embedding pri svakom save-u, zameni keyword scoring u `/api/chat` sa cosine similarity; backfill za postojeće capture-e
+- [ ] **Structured output + novi modeli** — zameni `JSON.parse` i forced `tool_choice` sa `output_config.format` na svim Claude endpointima (capture, search, summary, digest, cron) → garantovana struktura; uz to prelazak sa `claude-sonnet-4-6` na Sonnet 5.5 (search, chat, digest) i Haiku 5.5 (kategorizacija captura). Novi modeli ne podržavaju forced `tool_choice`, zato ide zajedno
+- [ ] **Settings stranica** — uključi/isključi auto digest, review podsetnike i task podsetnike; kasnije: praćenje AI potrošnje + mesečni limit, prag za relate, jezik AI odgovora
 - [ ] **Eval skripta** — 15–20 pitanja + očekivani capture-i (golden dataset), meri precision@1 i precision@3; pokreni na keyword vs. embedding retrievalu da vidiš konkretnu razliku *(radi tek kad RAG bude gotov)*
+- [ ] **Chunking** — dugi capture-i (transkripti) se dele na delove sa sopstvenim embeddingom (`capture_chunks` tabela) umesto sečenja na 8000 karaktera; meri eval pre/posle *(posle eval skripte)*
+- [ ] **Hybrid search + reranker** — vektori su loši za tačne termine i imena ("N+1", "Malkier"): kombinovati keyword (Postgres full-text) i vektorsku pretragu (npr. Reciprocal Rank Fusion), pa reranker (Voyage rerank) nad top kandidatima; meri evalom svaki korak posebno *(posle eval skripte)*
+- [ ] **Self-healing embeddinzi** — capture sačuvan dok Voyage ne radi ostaje bez embeddinga zauvek; dnevni cron popunjava `embedding is null` (logika iz backfill skripte), uz log koliko ih je bilo
+- [ ] **Query rewriting u chatu** — `/api/chat` pretvara u vektor samo trenutnu poruku, pa follow-up tipa "reci mi više o tome" vuče nasumične capture-e. Haiku 5.5 prepiše pitanje u samostalno ("reci mi više o Mockito doThrow") pre pretrage; u eval dodati i follow-up pitanja da se izmeri razlika
 - [ ] **Live AI sugestije** — predlaže tip/projekt dok kucaš, pre save
 - [ ] **Summarize capture** — dugme na kartici, AI sažetak jednog capture-a
 
@@ -30,6 +34,7 @@ _nothing_
 - [ ] **Webhook/Zapier** — okini automatizaciju kada se sačuva novi capture
 
 ## Done
+- [x] Fix: weekly digest se pravio 4–6× svakog ponedeljka (2 cron pokretanja × broj push pretplata) i kad nema novih captura
 - [x] Favorites / star
 - [x] Export (Markdown + JSON)
 - [x] Spaced repetition

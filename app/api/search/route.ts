@@ -1,8 +1,22 @@
 import { createClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
+import { embedOne } from "@/lib/embeddings";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// How many captures to retrieve and feed into the synthesis. Keeping this small
+// is the whole point of RAG: cost stays flat no matter how many captures exist.
+const RETRIEVE_COUNT = 12;
+
+type RetrievedCapture = {
+  id: string;
+  title: string;
+  text: string;
+  type: string;
+  project: string;
+  created_at: string;
+};
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -15,14 +29,32 @@ export async function POST(request: Request) {
   const { query } = await request.json();
   if (!query?.trim()) return NextResponse.json({ error: "Empty query" }, { status: 400 });
 
-  const { data: captures } = await supabase
-    .from("captures")
-    .select("id, title, text, type, project, created_at")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(100);
+  // RAG retrieval: embed the query and pull only the most semantically similar
+  // captures via pgvector, instead of sending the entire knowledge base.
+  let captures: RetrievedCapture[] = [];
+  try {
+    const queryEmbedding = await embedOne(query, "query");
+    const { data: matches, error: matchError } = await supabase.rpc("match_captures", {
+      query_embedding: queryEmbedding,
+      match_count: RETRIEVE_COUNT,
+      p_user_id: user.id,
+    });
+    if (matchError) throw matchError;
+    captures = (matches as RetrievedCapture[]) ?? [];
+  } catch (e) {
+    console.error("vector retrieval failed, falling back to recent captures:", e);
+    // Fallback (e.g. before backfill, or Voyage outage): use recent captures so
+    // search still works, just without semantic ranking.
+    const { data: recent } = await supabase
+      .from("captures")
+      .select("id, title, text, type, project, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(RETRIEVE_COUNT);
+    captures = recent ?? [];
+  }
 
-  if (!captures || captures.length === 0) {
+  if (captures.length === 0) {
     return NextResponse.json({
       synthesis: "No captures found. Start by adding some knowledge captures.",
       relevantCaptures: [],

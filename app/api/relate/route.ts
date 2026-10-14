@@ -1,8 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+import { embedOne, captureEmbedInput, RELATE_COUNT, RELATE_THRESHOLD } from "@/lib/embeddings";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -16,50 +14,44 @@ export async function POST(request: Request) {
 
   const { data: target } = await supabase
     .from("captures")
-    .select("*")
+    .select("id, title, text, embedding")
     .eq("id", captureId)
     .eq("user_id", user.id)
     .single();
 
   if (!target) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const { data: others } = await supabase
-    .from("captures")
-    .select("id, title, text, type, project")
-    .eq("user_id", user.id)
-    .neq("id", captureId)
-    .order("created_at", { ascending: false })
-    .limit(50);
-
-  if (!others || others.length === 0) return NextResponse.json({ ok: true });
-
-  const catalogue = others
-    .map((c) => `ID:${c.id} [${c.type}/${c.project}] ${c.title}: ${c.text.slice(0, 120)}`)
-    .join("\n");
-
-  let relatedIds: string[] = [];
+  // Use the stored embedding; compute (and persist) it if missing (old capture).
+  let embedding = target.embedding as number[] | null;
   try {
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 256,
-      system: `You find semantic connections between knowledge captures. Given a new capture and a list of existing captures, return ONLY a JSON array of UUIDs that are semantically related to the new capture. Return [] if none are related. Return ONLY the JSON array.`,
-      messages: [
-        {
-          role: "user",
-          content: `NEW CAPTURE:\n[${target.type}/${target.project}] ${target.title}: ${target.text}\n\nEXISTING CAPTURES:\n${catalogue}`,
-        },
-      ],
-    });
-
-    const content = message.content[0];
-    if (content.type === "text") {
-      const raw = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-      relatedIds = JSON.parse(raw);
-      if (!Array.isArray(relatedIds)) relatedIds = [];
+    if (!embedding) {
+      embedding = await embedOne(captureEmbedInput(target.title, target.text), "document");
+      await supabase
+        .from("captures")
+        .update({ embedding })
+        .eq("id", captureId)
+        .eq("user_id", user.id);
     }
-  } catch {
-    // AI unavailable — skip relation detection
+  } catch (e) {
+    console.error("relate: embedding unavailable:", e);
+    return NextResponse.json({ relatedIds: [] });
   }
+
+  const { data: matches, error } = await supabase.rpc("match_captures", {
+    query_embedding: embedding,
+    match_count: RELATE_COUNT,
+    p_user_id: user.id,
+    exclude_id: captureId,
+  });
+
+  if (error) {
+    console.error("relate: match_captures failed:", error);
+    return NextResponse.json({ relatedIds: [] });
+  }
+
+  const relatedIds: string[] = ((matches as { id: string; similarity: number }[]) ?? [])
+    .filter((m) => m.similarity >= RELATE_THRESHOLD)
+    .map((m) => m.id);
 
   if (relatedIds.length > 0) {
     await supabase
@@ -68,7 +60,7 @@ export async function POST(request: Request) {
       .eq("id", captureId)
       .eq("user_id", user.id);
 
-    // Bidirectional: update related captures too
+    // Bidirectional: add this capture to each related capture's list too.
     for (const rid of relatedIds) {
       const { data: rel } = await supabase
         .from("captures")

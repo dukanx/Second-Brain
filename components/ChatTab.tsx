@@ -8,24 +8,6 @@ import Markdown from "./Markdown";
 
 type Message = { role: "user" | "assistant"; content: string };
 
-function findContext(query: string, captures: Capture[], pinned: Capture | null, n = 8) {
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  const rest = pinned ? captures.filter((c) => c.id !== pinned.id) : captures;
-  const ranked = words.length
-    ? rest
-        .map((c) => {
-          const hay = `${c.title} ${c.text} ${c.type} ${c.project}`.toLowerCase();
-          const score = words.filter((w) => hay.includes(w)).length;
-          return { c, score };
-        })
-        .filter(({ score }) => score > 0)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, pinned ? n - 1 : n)
-        .map(({ c }) => c)
-    : rest.slice(0, pinned ? n - 1 : n);
-  return pinned ? [pinned, ...ranked] : ranked;
-}
-
 export default function ChatTab({
   captures,
   pinnedCapture,
@@ -63,10 +45,6 @@ export default function ChatTab({
     const msg = input.trim();
     if (!msg || loading) return;
 
-    const context = findContext(msg, captures, pinnedCapture ?? null)
-      .filter((c) => c.id !== pinnedCapture?.id)
-      .map((c) => ({ title: c.title, text: c.text, type: c.type, project: c.project }));
-
     const newHistory: Message[] = [...history, { role: "user", content: msg }];
     setHistory(newHistory);
     setInput("");
@@ -79,9 +57,8 @@ export default function ChatTab({
         body: JSON.stringify({
           message: msg,
           history,
-          context,
           pinnedCapture: pinnedCapture
-            ? { title: pinnedCapture.title, text: pinnedCapture.text, type: pinnedCapture.type, project: pinnedCapture.project }
+            ? { id: pinnedCapture.id, title: pinnedCapture.title, text: pinnedCapture.text, type: pinnedCapture.type, project: pinnedCapture.project }
             : null,
         }),
       });

@@ -1,9 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
+import { RELATE_COUNT, RELATE_THRESHOLD } from "@/lib/embeddings";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
+// Rebuild the whole relation graph from stored embeddings: for every capture,
+// take its nearest neighbours above the threshold and link them both ways.
+// Same rule as /api/relate, so single and batch relate never disagree.
 export async function POST() {
   const supabase = await createClient();
   const {
@@ -14,53 +15,32 @@ export async function POST() {
 
   const { data: captures } = await supabase
     .from("captures")
-    .select("id, title, text, type, project")
+    .select("id, embedding")
     .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
+    .not("embedding", "is", null);
 
   if (!captures || captures.length < 2)
     return NextResponse.json({ pairs: 0 });
 
-  // Use numeric indices in prompt → tiny output (e.g. [[0,3],[1,5]])
-  const catalogue = captures
-    .map((c, i) => `${i}: [${c.type}/${c.project}] ${c.title} — ${c.text.slice(0, 80)}`)
-    .join("\n");
-
-  let indexPairs: [number, number][] = [];
-
-  try {
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 4096,
-      system: `You are a knowledge graph builder. Given numbered captures, return ONLY a JSON array of index pairs [[i,j],...] for captures that are semantically related (share topics, themes, projects, or ideas). Be generous. Return ONLY the JSON array.`,
-      messages: [{ role: "user", content: catalogue }],
-    });
-
-    const content = message.content[0];
-    if (content.type === "text") {
-      const raw = content.text
-        .replace(/^```(?:json)?\s*/i, "")
-        .replace(/\s*```$/i, "")
-        .trim();
-      indexPairs = JSON.parse(raw);
-      if (!Array.isArray(indexPairs)) indexPairs = [];
-    }
-  } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
-  }
-
-  // Map indices → UUIDs
-  const uuidPairs: [string, string][] = indexPairs
-    .filter(([a, b]) => captures[a] && captures[b])
-    .map(([a, b]) => [captures[a].id, captures[b].id]);
-
-  // Build adjacency map
+  // Build adjacency map (undirected: A→B implies B→A)
   const adj: Record<string, Set<string>> = {};
-  for (const [a, b] of uuidPairs) {
-    if (!adj[a]) adj[a] = new Set();
-    if (!adj[b]) adj[b] = new Set();
-    adj[a].add(b);
-    adj[b].add(a);
+  const link = (a: string, b: string) => {
+    (adj[a] ??= new Set()).add(b);
+    (adj[b] ??= new Set()).add(a);
+  };
+
+  for (const c of captures) {
+    const { data: matches, error } = await supabase.rpc("match_captures", {
+      query_embedding: c.embedding,
+      match_count: RELATE_COUNT,
+      p_user_id: user.id,
+      exclude_id: c.id,
+    });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    for (const m of (matches as { id: string; similarity: number }[]) ?? []) {
+      if (m.similarity >= RELATE_THRESHOLD) link(c.id, m.id);
+    }
   }
 
   // Clear all existing related_ids
@@ -78,5 +58,6 @@ export async function POST() {
       .eq("user_id", user.id);
   }
 
-  return NextResponse.json({ pairs: uuidPairs.length, nodes: Object.keys(adj).length });
+  const pairs = Object.values(adj).reduce((sum, s) => sum + s.size, 0) / 2;
+  return NextResponse.json({ pairs, nodes: Object.keys(adj).length });
 }

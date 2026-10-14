@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { CAPTURE_COLUMNS } from "@/lib/captures";
 import { useRouter } from "next/navigation";
 import CaptureTab from "./CaptureTab";
 import SearchTab from "./SearchTab";
@@ -123,7 +124,7 @@ export default function BrainClient({
     try {
       const { data } = await supabase
         .from("captures")
-        .select("*")
+        .select(CAPTURE_COLUMNS)
         .order("created_at", { ascending: false });
       if (data) setCaptures(data);
     } finally {

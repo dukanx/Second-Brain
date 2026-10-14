@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { YoutubeTranscript } from "youtube-transcript";
+import { embedOne, captureEmbedInput } from "@/lib/embeddings";
+import { CAPTURE_COLUMNS } from "@/lib/captures";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -143,14 +145,22 @@ Return ONLY the JSON object, nothing else.`,
     // AI unavailable — save with defaults
   }
 
-  const extra: Record<string, string> = {};
+  const extra: Record<string, unknown> = {};
   if (due_date) extra.due_date = due_date;
   if (priority && ["high", "medium", "low"].includes(priority)) extra.priority = priority;
+
+  // Embedding for semantic search / relation (RAG). Best-effort: if Voyage is
+  // down we still save the capture; the backfill script can fill it in later.
+  try {
+    extra.embedding = await embedOne(captureEmbedInput(title, captureText), "document");
+  } catch (e) {
+    console.error("embedding failed on capture create:", e);
+  }
 
   const { data: capture, error } = await supabase
     .from("captures")
     .insert({ user_id: user.id, text: captureText, title, type, project, related_ids: [], ...extra })
-    .select()
+    .select(CAPTURE_COLUMNS)
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
