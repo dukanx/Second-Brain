@@ -55,3 +55,45 @@ export async function embedOne(text: string, inputType: InputType): Promise<numb
 export function captureEmbedInput(title: string, text: string): string {
   return `${title}\n\n${text}`.trim();
 }
+
+// Voyage reranker (cross-encoder): reads the query together with each candidate
+// and re-orders them by relevance. On the retrieval eval, vector top 15 +
+// rerank-2.5 lifted hit@1 from 83% to 100% for ~0.6 s per query.
+// Docs: https://docs.voyageai.com/reference/reranker-api
+const VOYAGE_RERANK_URL = "https://api.voyageai.com/v1/rerank";
+export const RERANK_MODEL = "rerank-2.5";
+// Title + start of text per candidate (same as the eval) keeps a 15–20
+// candidate call around 2–3K tokens.
+const RERANK_CHARS = 700;
+
+/** Re-order candidates by relevance to the query and keep the best `topK`. */
+export async function rerank<T extends { title: string; text: string }>(
+  query: string,
+  candidates: T[],
+  topK: number
+): Promise<T[]> {
+  if (candidates.length <= 1) return candidates.slice(0, topK);
+
+  const res = await fetch(VOYAGE_RERANK_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.VOYAGE_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: RERANK_MODEL,
+      query,
+      documents: candidates.map((c) => `${c.title}\n${c.text}`.slice(0, RERANK_CHARS)),
+      top_k: topK,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Voyage rerank failed: ${res.status} ${await res.text()}`);
+  }
+
+  const data = (await res.json()) as { data: { index: number; relevance_score: number }[] };
+  return data.data
+    .sort((a, b) => b.relevance_score - a.relevance_score)
+    .map((d) => candidates[d.index]);
+}

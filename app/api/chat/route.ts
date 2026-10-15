@@ -1,12 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
-import { embedOne } from "@/lib/embeddings";
+import { embedOne, rerank } from "@/lib/embeddings";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // How many captures to retrieve as context for each chat message.
 const CONTEXT_COUNT = 8;
+// Vector search returns more candidates; the reranker keeps the best CONTEXT_COUNT
+// (vector top 15 + rerank is the setup measured on the retrieval eval).
+const RERANK_CANDIDATES = 15;
 
 type Message = { role: "user" | "assistant"; content: string };
 type ContextCapture = { title: string; text: string; type: string; project: string };
@@ -30,12 +33,19 @@ export async function POST(request: Request) {
     const queryEmbedding = await embedOne(message, "query");
     const { data: matches, error } = await supabase.rpc("match_captures", {
       query_embedding: queryEmbedding,
-      match_count: CONTEXT_COUNT,
+      match_count: RERANK_CANDIDATES,
       p_user_id: user.id,
       exclude_id: pinnedCapture?.id ?? null,
     });
     if (error) throw error;
-    context = (matches as ContextCapture[]) ?? [];
+    const candidates = (matches as ContextCapture[]) ?? [];
+    try {
+      context = await rerank(message, candidates, CONTEXT_COUNT);
+    } catch (e) {
+      // Reranker down or rate limited: keep the vector order.
+      console.error("chat: rerank failed, using vector order:", e);
+      context = candidates.slice(0, CONTEXT_COUNT);
+    }
   } catch (e) {
     console.error("chat: vector retrieval failed, falling back to recent captures:", e);
     const { data: recent } = await supabase

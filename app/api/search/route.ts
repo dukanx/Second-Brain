@@ -1,13 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
-import { embedOne } from "@/lib/embeddings";
+import { embedOne, rerank } from "@/lib/embeddings";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // How many captures to retrieve and feed into the synthesis. Keeping this small
 // is the whole point of RAG: cost stays flat no matter how many captures exist.
 const RETRIEVE_COUNT = 12;
+// Vector search casts a wider net, then the reranker picks the best RETRIEVE_COUNT.
+const RERANK_CANDIDATES = 20;
 
 type RetrievedCapture = {
   id: string;
@@ -36,11 +38,18 @@ export async function POST(request: Request) {
     const queryEmbedding = await embedOne(query, "query");
     const { data: matches, error: matchError } = await supabase.rpc("match_captures", {
       query_embedding: queryEmbedding,
-      match_count: RETRIEVE_COUNT,
+      match_count: RERANK_CANDIDATES,
       p_user_id: user.id,
     });
     if (matchError) throw matchError;
-    captures = (matches as RetrievedCapture[]) ?? [];
+    const candidates = (matches as RetrievedCapture[]) ?? [];
+    try {
+      captures = await rerank(query, candidates, RETRIEVE_COUNT);
+    } catch (e) {
+      // Reranker down or rate limited: keep the vector order.
+      console.error("search: rerank failed, using vector order:", e);
+      captures = candidates.slice(0, RETRIEVE_COUNT);
+    }
   } catch (e) {
     console.error("vector retrieval failed, falling back to recent captures:", e);
     // Fallback (e.g. before backfill, or Voyage outage): use recent captures so
