@@ -17,6 +17,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { buildBm25, rrf } from "./ranking.mjs";
 
 const K = 8; // how many results each method returns (same as chat context)
 
@@ -52,10 +53,10 @@ async function embedQueries(texts) {
   return data.data.sort((a, b) => a.index - b.index).map((d) => d.embedding);
 }
 
-async function vectorSearch(embedding, userId) {
+async function vectorSearch(embedding, userId, limit = K) {
   const { data, error } = await supabase.rpc("match_captures", {
     query_embedding: embedding,
-    match_count: K,
+    match_count: limit,
     p_user_id: userId,
   });
   if (error) throw error;
@@ -100,9 +101,14 @@ for (const g of golden) g.expected = g.expected.map(resolve);
 
 const embeddings = await embedQueries(golden.map((g) => g.q)); // one request for all questions
 
+const bm25 = buildBm25(captures);
+const DEPTH = 20; // how deep each list goes before fusion
+
 const methods = {
   keyword: async (g) => keywordSearch(g.q, captures),
+  bm25: async (g) => bm25(g.q),
   vector: async (g, i) => vectorSearch(embeddings[i], userId),
+  hybrid: async (g, i) => rrf([bm25(g.q, DEPTH), await vectorSearch(embeddings[i], userId, DEPTH)]),
 };
 
 const results = {};
