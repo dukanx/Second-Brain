@@ -67,3 +67,26 @@ What we learned:
 
 Caveats: the dataset is small (one question ≈ 5%), and the questions were written by looking at
 the notes, so real-world questions may be harder.
+
+### 2026-10-15: reranker on top of vector search
+
+Vector search returns 15 candidates, and Voyage `rerank-2.5` re-orders them (title + first
+700 chars per candidate). Run with `--rerank`.
+
+| method | hit@1 | hit@3 | recall@5 | MRR |
+|---|---|---|---|---|
+| vector | 83% | 96% | 87% | 0.89 |
+| **vector + rerank** | **100%** | **100%** | **94%** | **1.00** |
+
+- Every question where vectors had the right capture lower in the list moved to rank 1:
+  "which internships am I choosing between" 6 → 1, "koji auto imam" 2 → 1,
+  "kako da testiram metodu koja ništa ne vraća…" 3 → 1. The reranker didn't push down any
+  question that vectors already had at rank 1.
+- Why it works: an embedding model encodes the question and each note separately. A reranker
+  (cross-encoder) reads the question and the note together, so it can match details directly.
+- Cost: about 2.3K tokens and ~0.6 s per query (`rerank-2.5-lite`: ~0.4 s).
+- **The eval is now saturated.** 100% hit@1 means this dataset can no longer show whether
+  a later change (chunking, query rewriting) helps. It needs harder questions: real questions
+  from using the app, follow-ups, and details buried deep in long notes.
+- `aggregate` questions stay at 0% for every method, as expected. They need a query router,
+  not better ranking.

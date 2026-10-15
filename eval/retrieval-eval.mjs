@@ -63,6 +63,46 @@ async function vectorSearch(embedding, userId, limit = K) {
   return data.map((m) => m.id);
 }
 
+// Reranker: a cross-encoder reads the question together with each candidate
+// (embeddings encode them separately) and re-orders the vector shortlist.
+// Opt-in with --rerank. Voyage's free tier allows 3 requests and 10K tokens
+// per minute, so calls are spaced out and a full run takes ~9 minutes.
+const RERANK_DEPTH = 15; // vector candidates the reranker re-orders
+const RERANK_CHARS = 700; // title + start of text sent per candidate
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+let lastRerankAt = 0;
+let lastRerankTokens = 0;
+
+async function rerank(query, ids, captureById) {
+  const wait = Math.max(21_000, lastRerankTokens * 6.5) - (Date.now() - lastRerankAt);
+  if (lastRerankAt && wait > 0) await sleep(wait);
+
+  const documents = ids.map((id) => {
+    const c = captureById.get(id);
+    return `${c.title}\n${c.text}`.slice(0, RERANK_CHARS);
+  });
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch("https://api.voyageai.com/v1/rerank", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.VOYAGE_API_KEY}` },
+      body: JSON.stringify({ model: "rerank-2.5", query, documents }),
+    });
+    lastRerankAt = Date.now();
+    if (res.status === 429 && attempt === 0) {
+      console.log("  rate limited, waiting 60s...");
+      await sleep(60_000);
+      continue;
+    }
+    if (!res.ok) throw new Error(`Voyage rerank failed: ${res.status} ${await res.text()}`);
+    const data = await res.json();
+    lastRerankTokens = data.usage.total_tokens;
+    return data.data
+      .sort((a, b) => b.relevance_score - a.relevance_score)
+      .slice(0, K)
+      .map((d) => ids[d.index]);
+  }
+}
+
 // ── Metrics ──────────────────────────────────────────────────────────────────
 
 function score(results, expected) {
@@ -110,6 +150,14 @@ const methods = {
   vector: async (g, i) => vectorSearch(embeddings[i], userId),
   hybrid: async (g, i) => rrf([bm25(g.q, DEPTH), await vectorSearch(embeddings[i], userId, DEPTH)]),
 };
+
+if (process.argv.includes("--rerank")) {
+  const captureById = new Map(captures.map((c) => [c.id, c]));
+  methods.rerank = async (g, i) => {
+    console.log(`  rerank ${g.id}/${golden.length}`);
+    return rerank(g.q, await vectorSearch(embeddings[i], userId, RERANK_DEPTH), captureById);
+  };
+}
 
 const results = {};
 for (const [name, run] of Object.entries(methods)) {
