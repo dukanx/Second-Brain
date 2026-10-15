@@ -1,0 +1,32 @@
+[
+  { "id": 1, "kind": "exact", "q": "N+1 problem", "expected": ["717658a6"] },
+  { "id": 2, "kind": "exact", "q": "šta su me pitali na Malkier intervjuu", "expected": ["57e96970", "40cd9a23"] },
+  { "id": 3, "kind": "exact", "q": "AllSecure CorvusPay", "expected": ["c21ed74f"] },
+  { "id": 4, "kind": "exact", "q": "kolika mi je stipendija", "expected": ["0f7fa5ee"] },
+  { "id": 5, "kind": "exact", "q": "ESP32 projekat sa biljkom", "expected": ["bf1c3af1"] },
+
+  { "id": 6, "kind": "paraphrase", "q": "kako da testiram metodu koja ništa ne vraća a treba da baci izuzetak", "expected": ["0bf22ca1"] },
+  { "id": 7, "kind": "paraphrase", "q": "kako da sprečim da dve niti istovremeno menjaju isti podatak", "expected": ["759263db", "0f5ca38f"] },
+  { "id": 8, "kind": "paraphrase", "q": "previše SQL upita kad učitavam listu entiteta", "expected": ["717658a6"] },
+  { "id": 9, "kind": "paraphrase", "q": "kako sam rešio plaćanje u aplikaciji za seoski turizam", "expected": ["c21ed74f"] },
+  { "id": 10, "kind": "paraphrase", "q": "kako frontend saznaje da je porudžbina spremna", "expected": ["5df2b2ef", "d9c1e34f"] },
+  { "id": 11, "kind": "paraphrase", "q": "koja poglavlja treba da ima diplomski", "expected": ["77913e5f"] },
+  { "id": 12, "kind": "paraphrase", "q": "kako se novac zapravo prebacuje između banaka", "expected": ["49e17ded", "ed374607"] },
+  { "id": 13, "kind": "paraphrase", "q": "koliko trošim mesečno na pretplate", "expected": ["a8876d92", "b51624a7"] },
+
+  { "id": 14, "kind": "cross-language", "q": "how do I mock dependencies in unit tests", "expected": ["af26612f", "301042f1", "e2ce954a", "0bf22ca1", "e63844a7", "1ad713ae"] },
+  { "id": 15, "kind": "cross-language", "q": "difference between merge and rebase", "expected": ["0575e929"] },
+  { "id": 16, "kind": "cross-language", "q": "which internships am I choosing between", "expected": ["dbb9bdcd"] },
+  { "id": 17, "kind": "cross-language", "q": "how long does a service instance live per request", "expected": ["b59964a4", "43a53e55"] },
+
+  { "id": 18, "kind": "personal", "q": "koji auto imam", "expected": ["3e18dc82"] },
+  { "id": 19, "kind": "personal", "q": "ko radi sa mnom na Village Bookeru", "expected": ["fbb2b65d"] },
+  { "id": 20, "kind": "personal", "q": "kojim firmama sam slao prijave", "expected": ["62fc53ad", "0b4e114b", "7c0a755f", "f47e9df6", "f3ab8632", "40cd9a23"] },
+  { "id": 21, "kind": "personal", "q": "zašto semantička pretraga nije dovoljna", "expected": ["4f9ce062"] },
+
+  { "id": 22, "kind": "aggregate", "q": "šta mi je trenutni fokus od projekata", "expected": ["1f0b54ac", "90de993e", "6d773a88", "983aa646", "77913e5f"] },
+  { "id": 23, "kind": "overview", "q": "koje projekte trenutno imam", "expected": ["65283036", "fbb2b65d", "c5d9ed0e", "c03f9d0b"] },
+  { "id": 24, "kind": "overview", "q": "kako stojim sa finansijama", "expected": ["0f7fa5ee", "a8876d92", "b51624a7", "90ed834f", "26ddd432"] },
+  { "id": 25, "kind": "aggregate", "q": "šta sam poslednje učio", "expected": ["1f0b54ac", "90de993e", "6d773a88", "983aa646", "f48f33f6", "af26612f", "3a41a165", "13f3aebb"] },
+  { "id": 26, "kind": "aggregate", "q": "koje taskove imam otvorene", "expected": ["b0020c93", "47b0b9fc"] }
+]

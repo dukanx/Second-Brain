@@ -12,10 +12,11 @@
 **AI**
 - [ ] **Structured output + novi modeli** — zameni `JSON.parse` i forced `tool_choice` sa `output_config.format` na svim Claude endpointima (capture, search, summary, digest, cron) → garantovana struktura; uz to prelazak sa `claude-sonnet-4-6` na Sonnet 5.5 (search, chat, digest) i Haiku 5.5 (kategorizacija captura). Novi modeli ne podržavaju forced `tool_choice`, zato ide zajedno
 - [ ] **Settings stranica** — uključi/isključi auto digest, review podsetnike i task podsetnike; kasnije: praćenje AI potrošnje + mesečni limit, prag za relate, jezik AI odgovora
-- [ ] **Eval skripta** — 15–20 pitanja + očekivani capture-i (golden dataset), meri precision@1 i precision@3; pokreni na keyword vs. embedding retrievalu da vidiš konkretnu razliku *(radi tek kad RAG bude gotov)*
+- [x] **Eval skripta** — `eval/golden.json` (26 pitanja) + `eval/retrieval-eval.mjs`; hit@1/hit@3/recall@5/MRR. Prvo merenje: stari keyword iz chata hit@3 39% → vektori 96%
 - [ ] **Chunking** — dugi capture-i (transkripti) se dele na delove sa sopstvenim embeddingom (`capture_chunks` tabela) umesto sečenja na 8000 karaktera; meri eval pre/posle *(posle eval skripte)*
 - [ ] **Hybrid search + reranker** — vektori su loši za tačne termine i imena ("N+1", "Malkier"): kombinovati keyword (Postgres full-text) i vektorsku pretragu (npr. Reciprocal Rank Fusion), pa reranker (Voyage rerank) nad top kandidatima; meri evalom svaki korak posebno *(posle eval skripte)*
 - [ ] **Self-healing embeddinzi** — capture sačuvan dok Voyage ne radi ostaje bez embeddinga zauvek; dnevni cron popunjava `embedding is null` (logika iz backfill skripte), uz log koliko ih je bilo
+- [ ] **Query router** — pitanja o vremenu i stanju ("šta sam poslednje učio", "trenutni fokus", "otvoreni taskovi") nisu pitanja o sličnosti: prepoznati tip pitanja i umesto vektorske pretrage uzeti najnovije capture-e ili filtrirati po tipu/datumu. U evalu su to `aggregate` pitanja (trenutno 0% za obe metode)
 - [ ] **Query rewriting u chatu** — `/api/chat` pretvara u vektor samo trenutnu poruku, pa follow-up tipa "reci mi više o tome" vuče nasumične capture-e. Haiku 5.5 prepiše pitanje u samostalno ("reci mi više o Mockito doThrow") pre pretrage; u eval dodati i follow-up pitanja da se izmeri razlika
 - [ ] **Live AI sugestije** — predlaže tip/projekt dok kucaš, pre save
 - [ ] **Summarize capture** — dugme na kartici, AI sažetak jednog capture-a
