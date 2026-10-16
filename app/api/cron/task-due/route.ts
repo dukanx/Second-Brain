@@ -1,6 +1,8 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import webpush from "web-push";
 import { NextResponse } from "next/server";
+import { fillMissingEmbeddings } from "@/lib/embeddings";
+import { getSettings } from "@/lib/settings";
 
 export async function GET(request: Request) {
   webpush.setVapidDetails(
@@ -15,6 +17,16 @@ export async function GET(request: Request) {
 
   const supabase = await createServiceClient();
 
+  // Daily maintenance: embed captures saved while Voyage was down, so they
+  // become searchable again. Logged so silent failures show up in Vercel logs.
+  let embedded = 0;
+  try {
+    embedded = await fillMissingEmbeddings(supabase);
+    if (embedded > 0) console.log(`task-due: filled ${embedded} missing embeddings`);
+  } catch (e) {
+    console.error("task-due: filling missing embeddings failed:", e);
+  }
+
   // Tomorrow's date (notify day before due)
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -24,11 +36,20 @@ export async function GET(request: Request) {
     .from("push_subscriptions")
     .select("user_id, subscription");
 
-  if (!subs?.length) return NextResponse.json({ sent: 0 });
+  if (!subs?.length) return NextResponse.json({ sent: 0, embedded });
+
+  // Group subscriptions per user so settings and tasks are read once per user.
+  const subsByUser = new Map<string, typeof subs>();
+  for (const sub of subs) {
+    subsByUser.set(sub.user_id, [...(subsByUser.get(sub.user_id) ?? []), sub]);
+  }
 
   let sent = 0;
 
-  for (const { user_id, subscription } of subs) {
+  for (const [user_id, userSubs] of subsByUser) {
+    const settings = await getSettings(supabase, user_id);
+    if (!settings.task_reminders) continue;
+
     const { data: tasks } = await supabase
       .from("captures")
       .select("id, title, priority")
@@ -45,15 +66,17 @@ export async function GET(request: Request) {
       : `Second Brain — ${tasks.length} task${tasks.length > 1 ? "s" : ""} due tomorrow`;
     const body = tasks.length > 1 ? taskList.slice(0, 100) : tasks[0].title;
 
-    try {
-      await webpush.sendNotification(subscription, JSON.stringify({ title, body, captureId: tasks[0].id, notifType: "task" }));
-      sent++;
-    } catch {
-      await supabase.from("push_subscriptions").delete()
-        .eq("user_id", user_id)
-        .eq("endpoint", subscription.endpoint);
+    for (const { subscription } of userSubs) {
+      try {
+        await webpush.sendNotification(subscription, JSON.stringify({ title, body, captureId: tasks[0].id, notifType: "task" }));
+        sent++;
+      } catch {
+        await supabase.from("push_subscriptions").delete()
+          .eq("user_id", user_id)
+          .eq("endpoint", subscription.endpoint);
+      }
     }
   }
 
-  return NextResponse.json({ sent });
+  return NextResponse.json({ sent, embedded });
 }

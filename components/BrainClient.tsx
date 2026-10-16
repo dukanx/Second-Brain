@@ -10,11 +10,12 @@ import GraphTab from "./GraphTab";
 import GrowthTab from "./GrowthTab";
 import ChatTab from "./ChatTab";
 import ArchitectureTab from "./ArchitectureTab";
+import SettingsTab from "./SettingsTab";
 import SearchOverlay from "./SearchOverlay";
 import type { User } from "@supabase/supabase-js";
 import {
   Sparkles, Search, Network, Sprout, MessageSquare, Hexagon,
-  Brain, Bell, RefreshCw, Circle, Power,
+  Brain, Bell, RefreshCw, Circle, Power, Settings,
   Lightbulb, Link2, CheckSquare, GraduationCap, StickyNote,
   type LucideIcon,
 } from "lucide-react";
@@ -41,7 +42,7 @@ export type Project = {
   color: string;
 };
 
-type Tab = "capture" | "search" | "graph" | "grow" | "chat" | "arch";
+type Tab = "capture" | "search" | "graph" | "grow" | "chat" | "arch" | "settings";
 
 const TYPE_COLORS: Record<string, string> = {
   Idea: "text-amber",
@@ -317,6 +318,16 @@ export default function BrainClient({
             </button>
           )}
           <button
+            onClick={() => setTab("settings")}
+            className={`flex items-center border border-border rounded px-2 py-1 transition-colors ${
+              tab === "settings" ? "text-amber border-amber" : "text-muted hover:text-text"
+            }`}
+            title="settings"
+            aria-label="settings"
+          >
+            <Settings size={13} strokeWidth={tab === "settings" ? 2.25 : 1.75} />
+          </button>
+          <button
             onClick={() => setSearchOpen(true)}
             className="flex items-center gap-1.5 text-xs text-muted hover:text-text border border-border rounded px-2 py-1 transition-colors"
             title="Search (⌘K)"
@@ -357,6 +368,15 @@ export default function BrainClient({
         {tab === "grow"    && <GrowthTab  captures={captures} setCaptures={setCaptures} taskId={taskId} />}
         {tab === "chat"    && <ChatTab    captures={captures} pinnedCapture={reviewId ? captures.find((c) => c.id === reviewId) ?? null : null} onMarkReviewed={markReviewed} />}
         {tab === "arch"    && <ArchitectureTab />}
+        {tab === "settings" && (
+          <SettingsTab
+            captures={captures}
+            setCaptures={setCaptures}
+            projects={projects}
+            notifStatus={notifStatus}
+            onEnableNotifications={enableNotifications}
+          />
+        )}
       </main>
 
       {/* Mobile bottom nav — desktop-only tabs excluded */}

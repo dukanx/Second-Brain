@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
 import webpush from "web-push";
 import { NextResponse } from "next/server";
+import { getSettings } from "@/lib/settings";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -97,7 +98,10 @@ export async function GET(request: Request) {
 
   if (!subs?.length) return NextResponse.json({ sent: 0 });
 
-  const isMonday = new Date().getDay() === 1;
+  // vercel.json runs this at 09:00 and 14:00 UTC; users pick which run reminds them.
+  const now = new Date();
+  const slot = now.getUTCHours() < 12 ? "morning" : "afternoon";
+  const today = now.getUTCDay();
   let sent = 0;
 
   // One user can have several subscriptions (phone + laptop). Group them so
@@ -109,15 +113,19 @@ export async function GET(request: Request) {
 
   for (const [user_id, userSubs] of subsByUser) {
     const notifications: { title: string; body: string; captureId?: string }[] = [];
+    const settings = await getSettings(supabase, user_id);
 
-    // Review reminder (daily) — fetch one random capture to preview
-    const { data: dueCaps, count } = await supabase
-      .from("captures")
-      .select("id, title", { count: "exact" })
-      .eq("user_id", user_id)
-      .in("type", ["Learning", "Idea"])
-      .or(`last_reviewed_at.is.null,last_reviewed_at.lt.${cutoff}`)
-      .limit(10);
+    // Review reminder — only in the run(s) the user chose; one random capture as preview
+    const wantsReminder = settings.review_reminders === "both" || settings.review_reminders === slot;
+    const { data: dueCaps, count } = wantsReminder
+      ? await supabase
+          .from("captures")
+          .select("id, title", { count: "exact" })
+          .eq("user_id", user_id)
+          .in("type", ["Learning", "Idea"])
+          .or(`last_reviewed_at.is.null,last_reviewed_at.lt.${cutoff}`)
+          .limit(10)
+      : { data: null, count: 0 };
 
     if (count && dueCaps?.length) {
       const pick = dueCaps[Math.floor(Math.random() * dueCaps.length)];
@@ -128,8 +136,9 @@ export async function GET(request: Request) {
       });
     }
 
-    // Weekly digest (Mondays only) — auto-generate and save to digests table
-    if (isMonday && (await shouldGenerateWeeklyDigest(supabase, user_id))) {
+    // Weekly digest — morning run of the user's chosen day; auto-generate and save
+    const digestDue = settings.digest_enabled && slot === "morning" && today === settings.digest_day;
+    if (digestDue && (await shouldGenerateWeeklyDigest(supabase, user_id))) {
       const insight = await generateAndSaveDigest(supabase, user_id);
       if (insight) {
         notifications.push({

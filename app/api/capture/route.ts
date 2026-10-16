@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { YoutubeTranscript } from "youtube-transcript";
 import { embedOne, captureEmbedInput } from "@/lib/embeddings";
 import { CAPTURE_COLUMNS } from "@/lib/captures";
+import { getSettings } from "@/lib/settings";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -110,12 +111,18 @@ export async function POST(request: Request) {
     .select("name")
     .eq("user_id", user.id);
   const projectNames = userProjects?.map((p) => p.name) ?? [];
-  const fallbackProject = projectNames[projectNames.length - 1] ?? "Other";
+  // Used when AI is unavailable or returns an unknown project: the user's
+  // default from settings if it still exists, else the last project.
+  const settings = await getSettings(supabase, user.id);
+  const fallbackProject =
+    settings.default_project && projectNames.includes(settings.default_project)
+      ? settings.default_project
+      : projectNames[projectNames.length - 1] ?? "Other";
   const projectList = projectNames.length > 0
     ? projectNames.map((n) => `"${n}"`).join(" | ")
     : '"Other"';
 
-  let type = "Note";
+  let type: string = settings.default_type ?? "Note";
   let project = fallbackProject;
   let title = text.slice(0, 60);
 

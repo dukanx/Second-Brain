@@ -8,6 +8,7 @@ import {
   ChevronDown, ChevronUp, MessageSquare, Plus, X, Inbox,
 } from "lucide-react";
 import Markdown from "./Markdown";
+import { exportJSON, exportMarkdown } from "@/lib/export";
 
 function abbrev(name: string): string {
   const words = name.trim().split(/\s+/);
@@ -211,32 +212,6 @@ export default function CaptureTab({
 
   const isUrl = text.trim().startsWith("http");
   const isTaskMode = text.includes("[ ]") || text.trim().startsWith("[ ]");
-
-  function exportJSON() {
-    const blob = new Blob([JSON.stringify(captures, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `second-brain-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function exportMarkdown() {
-    const lines = captures.map((c) => {
-      const date = new Date(c.created_at).toLocaleDateString("sr", { day: "2-digit", month: "2-digit", year: "2-digit" });
-      const star = c.starred ? " ★" : "";
-      return `## ${c.title}${star}\n**Type:** ${c.type} | **Project:** ${c.project} | **Date:** ${date}\n\n${c.text}\n\n---`;
-    });
-    const md = `# Second Brain Export\n*${new Date().toLocaleDateString()}*\n\n---\n\n${lines.join("\n\n")}`;
-    const blob = new Blob([md], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `second-brain-${new Date().toISOString().slice(0, 10)}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -498,14 +473,14 @@ export default function CaptureTab({
           </span>
           <div className="flex gap-1.5">
             <button
-              onClick={exportMarkdown}
+              onClick={() => exportMarkdown(captures)}
               className="flex items-center gap-1 text-[10px] text-muted hover:text-text border border-border rounded px-2 py-0.5 transition-colors"
             >
               <Download size={10} strokeWidth={1.75} />
               .md
             </button>
             <button
-              onClick={exportJSON}
+              onClick={() => exportJSON(captures)}
               className="flex items-center gap-1 text-[10px] text-muted hover:text-text border border-border rounded px-2 py-0.5 transition-colors"
             >
               <Download size={10} strokeWidth={1.75} />

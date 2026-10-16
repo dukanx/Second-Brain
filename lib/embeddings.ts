@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 // Voyage AI embeddings (Anthropic's recommended embeddings provider).
 // Docs: https://docs.voyageai.com/reference/embeddings-api
 const VOYAGE_URL = "https://api.voyageai.com/v1/embeddings";
@@ -54,6 +56,40 @@ export async function embedOne(text: string, inputType: InputType): Promise<numb
 /** Build the text we embed for a capture (title carries a lot of signal). */
 export function captureEmbedInput(title: string, text: string): string {
   return `${title}\n\n${text}`.trim();
+}
+
+/**
+ * Self-healing: embed captures that were saved while Voyage was unavailable
+ * (capture save is best-effort, so those rows have embedding = null and are
+ * invisible to search). Called by a daily cron. One request, capped at
+ * ~24K chars (~8K tokens) to fit Voyage's free-tier per-minute limit; anything
+ * left over is picked up the next day. Returns how many captures were fixed.
+ */
+export async function fillMissingEmbeddings(supabase: SupabaseClient, maxChars = 24_000): Promise<number> {
+  const { data: rows, error } = await supabase
+    .from("captures")
+    .select("id, title, text")
+    .is("embedding", null)
+    .limit(100);
+  if (error) throw error;
+  if (!rows?.length) return 0;
+
+  const batch: { id: string; input: string }[] = [];
+  let chars = 0;
+  for (const r of rows) {
+    const input = captureEmbedInput(r.title ?? "", r.text ?? "").slice(0, MAX_CHARS);
+    if (batch.length > 0 && chars + input.length > maxChars) break;
+    batch.push({ id: r.id, input });
+    chars += input.length;
+  }
+
+  const vectors = await embed(batch.map((b) => b.input), "document");
+  const results = await Promise.all(
+    batch.map((b, i) => supabase.from("captures").update({ embedding: vectors[i] }).eq("id", b.id))
+  );
+  const failed = results.find((r) => r.error);
+  if (failed?.error) throw failed.error;
+  return batch.length;
 }
 
 // Voyage reranker (cross-encoder): reads the query together with each candidate

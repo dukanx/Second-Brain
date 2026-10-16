@@ -11,13 +11,14 @@
 
 **AI**
 - [ ] **Structured output + novi modeli** — zameni `JSON.parse` i forced `tool_choice` sa `output_config.format` na svim Claude endpointima (capture, search, summary, digest, cron) → garantovana struktura; uz to prelazak sa `claude-sonnet-4-6` na Sonnet 5.5 (search, chat, digest) i Haiku 5.5 (kategorizacija captura). Novi modeli ne podržavaju forced `tool_choice`, zato ide zajedno
-- [ ] **Settings stranica** — uključi/isključi auto digest, review podsetnike i task podsetnike; kasnije: praćenje AI potrošnje + mesečni limit, prag za relate, jezik AI odgovora
+- [ ] **Settings stranica** — ✅ faza 1: digest on/off + dan, review podsetnici (jutro/popodne/oba/off), task podsetnici, podrazumevani tip i projekat, export, brisanje podataka (`supabase/settings-and-query-log.sql` treba pokrenuti) · faza 2 (uz structured output): praćenje AI potrošnje + mesečni limit, auto-kategorizacija/relate on/off, jezik AI odgovora · faza 3: klizač za relate prag
 - [x] **Eval skripta** — `eval/golden.json` (26 pitanja) + `eval/retrieval-eval.mjs`; hit@1/hit@3/recall@5/MRR. Prvo merenje: stari keyword iz chata hit@3 39% → vektori 96%
 - [ ] **Chunking** — dugi capture-i (transkripti) se dele na delove sa sopstvenim embeddingom (`capture_chunks` tabela) umesto sečenja na 8000 karaktera; meri eval pre/posle *(posle eval skripte)*
 - [x] **Hybrid search** — izmereno 2026-10-15: BM25 hit@3 52%, hybrid (RRF) 78%, sami vektori 96% → hybrid ne ide u produkciju (BM25 unosi šum, srpska morfologija). Detalji u `eval/README.md`
 - [x] **Reranker** — eval 2026-10-15: vektori + Voyage rerank-2.5 → hit@1 100% (vektori sami 83%), ~0.6 s po upitu. U produkciji: search (20 → 12) i chat (15 → 8), fallback na redosled vektora
+- [x] **Log upita** — `query_log` tabela: svako pitanje iz search/chata, šta je vraćeno i da li je bio fallback (rerank/vector)
 - [ ] **Teži eval dataset** — trenutni je zasićen (100%), ne može da izmeri chunking ni query rewriting: dodati prava pitanja iz korišćenja, follow-up pitanja, detalje iz dugačkih captura
-- [ ] **Self-healing embeddinzi** — capture sačuvan dok Voyage ne radi ostaje bez embeddinga zauvek; dnevni cron popunjava `embedding is null` (logika iz backfill skripte), uz log koliko ih je bilo
+- [x] **Self-healing embeddinzi** — `fillMissingEmbeddings` u dnevnom task-due cronu popunjava `embedding is null` (do ~8K tokena po pokretanju)
 - [ ] **Query router** — pitanja o vremenu i stanju ("šta sam poslednje učio", "trenutni fokus", "otvoreni taskovi") nisu pitanja o sličnosti: prepoznati tip pitanja i umesto vektorske pretrage uzeti najnovije capture-e ili filtrirati po tipu/datumu. U evalu su to `aggregate` pitanja (trenutno 0% za obe metode)
 - [ ] **Query rewriting u chatu** — `/api/chat` pretvara u vektor samo trenutnu poruku, pa follow-up tipa "reci mi više o tome" vuče nasumične capture-e. Haiku 5.5 prepiše pitanje u samostalno ("reci mi više o Mockito doThrow") pre pretrage; u eval dodati i follow-up pitanja da se izmeri razlika
 - [ ] **Live AI sugestije** — predlaže tip/projekt dok kucaš, pre save

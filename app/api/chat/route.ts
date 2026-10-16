@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { embedOne, rerank } from "@/lib/embeddings";
+import { logQuery, type RetrievalFallback } from "@/lib/queryLog";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -13,6 +14,7 @@ const RERANK_CANDIDATES = 15;
 
 type Message = { role: "user" | "assistant"; content: string };
 type ContextCapture = { title: string; text: string; type: string; project: string };
+type RetrievedCapture = ContextCapture & { id: string };
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -28,7 +30,8 @@ export async function POST(request: Request) {
   // RAG retrieval: embed the message and pull the most similar captures via
   // pgvector. Only the current message is embedded, so a vague follow-up
   // ("tell me more") retrieves poorly; the pinned capture covers the common case.
-  let context: ContextCapture[] = [];
+  let context: RetrievedCapture[] = [];
+  let fallback: RetrievalFallback = null;
   try {
     const queryEmbedding = await embedOne(message, "query");
     const { data: matches, error } = await supabase.rpc("match_captures", {
@@ -38,24 +41,34 @@ export async function POST(request: Request) {
       exclude_id: pinnedCapture?.id ?? null,
     });
     if (error) throw error;
-    const candidates = (matches as ContextCapture[]) ?? [];
+    const candidates = (matches as RetrievedCapture[]) ?? [];
     try {
       context = await rerank(message, candidates, CONTEXT_COUNT);
     } catch (e) {
       // Reranker down or rate limited: keep the vector order.
       console.error("chat: rerank failed, using vector order:", e);
+      fallback = "rerank";
       context = candidates.slice(0, CONTEXT_COUNT);
     }
   } catch (e) {
     console.error("chat: vector retrieval failed, falling back to recent captures:", e);
+    fallback = "vector";
     const { data: recent } = await supabase
       .from("captures")
-      .select("title, text, type, project")
+      .select("id, title, text, type, project")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(CONTEXT_COUNT);
     context = recent ?? [];
   }
+
+  await logQuery(supabase, {
+    userId: user.id,
+    source: "chat",
+    query: message,
+    retrievedIds: context.map((c) => c.id),
+    fallback,
+  });
 
   const pinnedText = pinnedCapture
     ? pinnedCapture.text.length > 2000

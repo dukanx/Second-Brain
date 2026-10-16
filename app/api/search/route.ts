@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { embedOne, rerank } from "@/lib/embeddings";
+import { logQuery, type RetrievalFallback } from "@/lib/queryLog";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -34,6 +35,7 @@ export async function POST(request: Request) {
   // RAG retrieval: embed the query and pull only the most semantically similar
   // captures via pgvector, instead of sending the entire knowledge base.
   let captures: RetrievedCapture[] = [];
+  let fallback: RetrievalFallback = null;
   try {
     const queryEmbedding = await embedOne(query, "query");
     const { data: matches, error: matchError } = await supabase.rpc("match_captures", {
@@ -48,10 +50,12 @@ export async function POST(request: Request) {
     } catch (e) {
       // Reranker down or rate limited: keep the vector order.
       console.error("search: rerank failed, using vector order:", e);
+      fallback = "rerank";
       captures = candidates.slice(0, RETRIEVE_COUNT);
     }
   } catch (e) {
     console.error("vector retrieval failed, falling back to recent captures:", e);
+    fallback = "vector";
     // Fallback (e.g. before backfill, or Voyage outage): use recent captures so
     // search still works, just without semantic ranking.
     const { data: recent } = await supabase
@@ -62,6 +66,14 @@ export async function POST(request: Request) {
       .limit(RETRIEVE_COUNT);
     captures = recent ?? [];
   }
+
+  await logQuery(supabase, {
+    userId: user.id,
+    source: "search",
+    query,
+    retrievedIds: captures.map((c) => c.id),
+    fallback,
+  });
 
   if (captures.length === 0) {
     return NextResponse.json({
