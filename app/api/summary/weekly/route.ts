@@ -1,8 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+import { generateObject, isRateLimited } from "@/lib/llm";
 
 function getWeekStart(): string {
   const d = new Date();
@@ -53,23 +51,36 @@ export async function POST() {
     .map((c) => `[${c.type}][${c.project}] ${c.title}: ${c.text.slice(0, 80)}`)
     .join("\n");
 
-  const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 1024,
-    system: `You are a personal knowledge analyst. Analyze this week's captures and return ONLY valid JSON:
-- highlights: string[] — 3-4 most notable things captured (max 10 words each)
-- themes: string[] — 2-3 main themes (max 4 words each)
-- insight: string — one key observation about this week (max 2 sentences)
-- momentum: "high" | "medium" | "low" — based on quantity and variety of captures
-
-Return ONLY the JSON object. Keep all strings short.`,
-    messages: [{ role: "user", content: `${captures.length} captures this week:\n${catalogue}` }],
-  });
-
-  const content = message.content[0];
-  if (content.type !== "text") throw new Error("No text response");
-  const raw = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-  const parsed = JSON.parse(raw);
+  type Summary = { highlights: string[]; themes: string[]; insight: string; momentum: "high" | "medium" | "low" };
+  let parsed: Summary;
+  try {
+    parsed = await generateObject<Summary>({
+      maxTokens: 1500,
+      schemaName: "weekly_summary",
+      system: `You are a personal knowledge analyst. Analyze this week's captures. Keep all strings short, in the language most captures are written in.
+- highlights: 3-4 most notable things captured (max 10 words each)
+- themes: 2-3 main themes (max 4 words each)
+- insight: one key observation about this week (max 2 sentences)
+- momentum: based on quantity and variety of captures`,
+      messages: [{ role: "user", content: `${captures.length} captures this week:\n${catalogue}` }],
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["highlights", "themes", "insight", "momentum"],
+        properties: {
+          highlights: { type: "array", items: { type: "string" } },
+          themes: { type: "array", items: { type: "string" } },
+          insight: { type: "string" },
+          momentum: { type: "string", enum: ["high", "medium", "low"] },
+        },
+      },
+    });
+  } catch (e) {
+    console.error("weekly summary: generation failed:", e);
+    return isRateLimited(e)
+      ? NextResponse.json({ error: "AI is busy (free tier limit) — try again in a minute." }, { status: 429 })
+      : NextResponse.json({ error: "Summary generation failed" }, { status: 500 });
+  }
 
   await supabase
     .from("summaries")

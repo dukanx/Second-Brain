@@ -1,16 +1,18 @@
 import { createClient } from "@/lib/supabase/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { embedOne, rerank } from "@/lib/embeddings";
 import { logQuery, type RetrievalFallback } from "@/lib/queryLog";
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+import { generateText, isRateLimited } from "@/lib/llm";
 
 // How many captures to retrieve as context for each chat message.
 const CONTEXT_COUNT = 8;
 // Vector search returns more candidates; the reranker keeps the best CONTEXT_COUNT
 // (vector top 15 + rerank is the setup measured on the retrieval eval).
 const RERANK_CANDIDATES = 15;
+// Per-capture text in the context. The reranker picks good captures, so give
+// the model more than the first sentence; 8 × 500 chars stays well within the
+// 8K tokens/minute limit together with the pinned capture and history.
+const CONTEXT_CHARS = 500;
 
 type Message = { role: "user" | "assistant"; content: string };
 type ContextCapture = { title: string; text: string; type: string; project: string };
@@ -80,24 +82,23 @@ export async function POST(request: Request) {
     : "";
 
   const contextBlock = context.length > 0
-    ? `Additional captures from their knowledge base:\n${context.map((c) => `[${c.type}][${c.project}] ${c.title}: ${c.text.slice(0, 150)}`).join("\n")}`
+    ? `Additional captures from their knowledge base:\n${context.map((c) => `[${c.type}][${c.project}] ${c.title}: ${c.text.slice(0, CONTEXT_CHARS)}`).join("\n")}`
     : "";
 
   const recentHistory = history.slice(-6);
 
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 600,
-    system: `You are a helpful assistant for a personal knowledge base. Answer concisely based on the user's captures. If the answer isn't in the captures, say so briefly.
+  try {
+    const reply = await generateText({
+      maxTokens: 1500,
+      system: `You are a helpful assistant for a personal knowledge base. Answer concisely based on the user's captures, in the language the user writes in. If the answer isn't in the captures, say so briefly.
 
 ${pinnedBlock}${contextBlock}`.trim(),
-    messages: [
-      ...recentHistory,
-      { role: "user", content: message },
-    ],
-  });
-
-  const content = response.content[0];
-  if (content.type !== "text") return NextResponse.json({ error: "No response" }, { status: 500 });
-  return NextResponse.json({ reply: content.text });
+      messages: [...recentHistory, { role: "user", content: message }],
+    });
+    return NextResponse.json({ reply });
+  } catch (e) {
+    console.error("chat: LLM call failed:", e);
+    const error = isRateLimited(e) ? "AI is busy (free tier limit) — try again in a minute." : "AI unavailable";
+    return NextResponse.json({ error }, { status: isRateLimited(e) ? 429 : 500 });
+  }
 }

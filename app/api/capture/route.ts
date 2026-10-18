@@ -1,12 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { YoutubeTranscript } from "youtube-transcript";
 import { embedOne, captureEmbedInput } from "@/lib/embeddings";
 import { CAPTURE_COLUMNS } from "@/lib/captures";
 import { getSettings } from "@/lib/settings";
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+import { categorizeCapture, projectFromNeighbors } from "@/lib/categorize";
 
 function isUrl(text: string) {
   try { new URL(text.trim()); return text.trim().startsWith("http"); }
@@ -106,9 +104,11 @@ export async function POST(request: Request) {
     aiInput = captureText.slice(0, 1200);
   }
 
+  // select("*") so this keeps working before the `description` column exists
+  // (supabase/project-descriptions.sql); descriptions are then just absent.
   const { data: userProjects } = await supabase
     .from("projects")
-    .select("name")
+    .select("*")
     .eq("user_id", user.id);
   const projectNames = userProjects?.map((p) => p.name) ?? [];
   // Used when AI is unavailable or returns an unknown project: the user's
@@ -118,38 +118,19 @@ export async function POST(request: Request) {
     settings.default_project && projectNames.includes(settings.default_project)
       ? settings.default_project
       : projectNames[projectNames.length - 1] ?? "Other";
-  const projectList = projectNames.length > 0
-    ? projectNames.map((n) => `"${n}"`).join(" | ")
-    : '"Other"';
 
   let type: string = settings.default_type ?? "Note";
   let project = fallbackProject;
   let title = text.slice(0, 60);
 
   try {
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 256,
-      system: `You are a knowledge categorization AI. Analyze the given text and return ONLY valid JSON with these fields:
-- type: one of "Idea" | "Link" | "Task" | "Learning" | "Note"
-- project: one of ${projectList}
-- title: a short, descriptive title (max 60 chars, no quotes)
-
-Return ONLY the JSON object, nothing else.`,
-      messages: [{ role: "user", content: aiInput }],
-    });
-
-    const content = message.content[0];
-    if (content.type === "text") {
-      const raw = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-      const parsed = JSON.parse(raw);
-      type = parsed.type ?? type;
-      const validProjects = new Set(projectNames);
-      project = validProjects.has(parsed.project) ? parsed.project : fallbackProject;
-      title = parsed.title ?? title;
-    }
-  } catch {
-    // AI unavailable — save with defaults
+    const parsed = await categorizeCapture(aiInput, userProjects ?? []);
+    type = parsed.type;
+    project = parsed.project;
+    title = parsed.title || title;
+  } catch (e) {
+    // AI unavailable (rate limit, outage) — save with defaults from settings
+    console.error("capture: categorization failed, using defaults:", e);
   }
 
   const extra: Record<string, unknown> = {};
@@ -159,7 +140,13 @@ Return ONLY the JSON object, nothing else.`,
   // Embedding for semantic search / relation (RAG). Best-effort: if Voyage is
   // down we still save the capture; the backfill script can fill it in later.
   try {
-    extra.embedding = await embedOne(captureEmbedInput(title, captureText), "document");
+    const embedding = await embedOne(captureEmbedInput(title, captureText), "document");
+    extra.embedding = embedding;
+
+    // If the most similar existing captures mostly sit in one project, follow
+    // the user's own filing habit instead of the LLM's guess.
+    const neighborProject = await projectFromNeighbors(supabase, user.id, embedding, projectNames);
+    if (neighborProject) project = neighborProject;
   } catch (e) {
     console.error("embedding failed on capture create:", e);
   }

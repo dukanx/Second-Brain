@@ -65,6 +65,8 @@ export default function ChatTab({
       const data = await res.json();
       if (data.reply) {
         setHistory((h) => [...h, { role: "assistant", content: data.reply }]);
+      } else if (data.error) {
+        setHistory((h) => [...h, { role: "assistant", content: `⚠ ${data.error}` }]);
       }
     } finally {
       setLoading(false);

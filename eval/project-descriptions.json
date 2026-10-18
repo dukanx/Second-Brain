@@ -1,0 +1,11 @@
+{
+ "FON": "fakultet kao takav: study planovi, predmeti, kolokvijumi i obaveze, diplomski (tehničko znanje sa predmeta ide po temi, npr. u Software Engineering)",
+ "Glumac Plus": "aplikacija za porodični restoran (palačinkarna): funkcionalnosti, kod, odluke i ono što učim direktno za nju",
+ "Village Booker": "timska platforma za ruralni turizam: arhitektura, stack, odluke, tim",
+ "Hearth": ".NET aplikacija za zajedničke kućne obaveze (household tasks)",
+ "IoT": "hardverski i IoT projekti: ESP32, senzori, Srećna biljka",
+ "Software Engineering": "opšte programiranje van projekata: backend, frontend, testiranje, alati, CS osnove, system design",
+ "AI Engineering": "AI i ML: LLM-ovi, RAG, agenti, modeli, kursevi i resursi za AI karijeru",
+ "Personal": "život van koda: finansije, trening, karijera i prijave za posao, knjige, planovi",
+ "Other": "znanje iz drugih oblasti: fintech, biznis"
+}
