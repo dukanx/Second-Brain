@@ -49,13 +49,13 @@ const NODES: Record<string, NodeDetail> = {
   brainclient: {
     title: 'BrainClient.tsx',
     file: 'components/BrainClient.tsx',
-    description: 'The main hub component. Owns global captures[] and projects[] state, orchestrates 6 tabs, handles auth, visibility-based polling, notification routing, and keyboard shortcuts.',
+    description: 'The main hub component. Owns global captures[] and projects[] state, orchestrates the tabs and the settings page, handles auth, background sync, notification routing, and keyboard shortcuts.',
     tech: ['React 19 (useState, useCallback, useEffect)', 'Supabase client SDK', 'Next.js router'],
     details: [
-      'Polls Supabase every 60s via setInterval + onVisibilityChange (free realtime alternative)',
+      'Re-syncs captures on an interval and whenever the tab becomes visible (free realtime alternative)',
+      'Selects CAPTURE_COLUMNS, never the 1024-float embedding column',
       'Routes SW postMessages: open-review → setTab("chat"), open-task → setTab("grow")',
-      'Cmd+K shortcut → opens SearchOverlay modal',
-      'Passes captures[] + callbacks down to all tab components via props',
+      'Cmd+K shortcut → opens SearchOverlay modal; gear icon → SettingsTab',
       'Manages notification permission flow and VAPID push subscription',
     ],
   },
@@ -68,152 +68,161 @@ const NODES: Record<string, NodeDetail> = {
       'URL auto-detected in input → sends source_url to POST body for enrichment',
       'Voice: browser SpeechRecognition continuous mode → live text in input field',
       'Audio file: FormData upload → /api/transcribe → transcript merged with typed text',
-      'Template buttons: Task / Idea / TIL / Link / Note prefix shortcuts',
-      'Filter + sort: by type, project, starred, created date',
+      'After save → POST /api/relate in the background ("finding connections…")',
+      'Filter + sort: by type, project, starred, created date; export .md / .json',
     ],
   },
   chat_tab: {
     title: 'ChatTab.tsx',
     file: 'components/ChatTab.tsx',
-    description: 'RAG-based conversational interface. Operates freely or with a pinned capture as primary context. Maintains conversation history across turns.',
-    tech: ['Keyword-based RAG', 'Chat history (last 6 turns)', 'Spaced repetition integration'],
+    description: 'Conversational interface over the knowledge base. Works freely or with a pinned capture as primary context. Retrieval happens on the server (/api/chat).',
+    tech: ['Vector RAG + reranker (server-side)', 'Chat history (last 6 turns)', 'Spaced repetition integration'],
     details: [
-      'Pinned capture always prepended first in Claude\'s context window',
-      'Keyword match: user message tokens scored against title+text+type+project of all captures',
-      'Top 7 ranked captures sent as context (top 8 when no pinned capture)',
+      'Sends { message, history, pinnedCapture? } — no client-side ranking',
+      'Pinned capture always comes first in the model context',
+      'Errors (e.g. free-tier rate limit) are shown as a chat message instead of failing silently',
       '"Mark Reviewed" → PATCH last_reviewed_at on pinned capture → removes from review queue',
     ],
   },
   search_tab: {
     title: 'SearchTab.tsx',
     file: 'components/SearchTab.tsx',
-    description: 'Semantic search that synthesizes insights across the entire knowledge base using Claude AI.',
-    tech: ['Claude full-catalogue scan (100 captures)', 'JSON structured response', 'Follow-up question loop'],
+    description: 'RAG search: answers a question from the most relevant captures, found by vector search and a reranker.',
+    tech: ['pgvector', 'Voyage rerank-2.5', 'Strict structured output'],
     details: [
-      'Sends query + all captures (up to 100) to Claude as a formatted catalogue',
-      'Returns: synthesis text + relevantIds[] + 3 follow-up questions',
+      'Shows: synthesis text + the captures the answer drew on + 3 follow-up questions',
       'Follow-up question buttons → automatically trigger a new search',
-      'Relevant captures highlighted/filtered in list below the synthesis',
+      'Relevant captures can be opened in CaptureDetailModal',
     ],
   },
   graph_tab: {
     title: 'GraphTab.tsx',
     file: 'components/GraphTab.tsx',
-    description: 'Interactive force-directed knowledge graph. Visualizes semantic relationships between all captures.',
-    tech: ['Custom force simulation (no D3)', 'Canvas API', 'Pointer events (pan/zoom)', 'Batch relate mode'],
+    description: 'Interactive force-directed knowledge graph. Visualizes relations between captures (cosine similarity ≥ 0.71).',
+    tech: ['Custom force simulation (no D3)', 'Canvas API', 'Pointer events (pan/zoom)', 'Batch relate'],
     details: [
       'Custom physics: repulsion between all nodes + spring attraction along related_ids edges',
       'Node size ∝ related_ids.length (more connections = bigger node)',
       'Pan/zoom via pointerdown + pointermove events on canvas',
-      'Batch mode: select multiple captures → /api/relate/batch → new edges appear in graph',
+      '"Batch relate" → /api/relate/batch rebuilds every edge from stored embeddings',
       'Filter nodes by project, type, or starred status',
     ],
   },
   growth_tab: {
     title: 'GrowthTab.tsx',
     file: 'components/GrowthTab.tsx',
-    description: '52-week heatmap, streak, spaced repetition queue, task manager, weekly AI summary, and AI digest — all embedded in a single collapsable-section layout.',
-    tech: ['ISO week date math', 'Spaced repetition (14-day cron cutoff)', 'Claude weekly summary', 'Claude digest', 'JSONB subtasks'],
+    description: '52-week heatmap, streak, spaced repetition queue, task manager, weekly AI summary, and AI digest — all in a single collapsable-section layout.',
+    tech: ['ISO week date math', 'Spaced repetition', 'LLM weekly summary', 'LLM digest', 'JSONB subtasks'],
     details: [
       '52-week GitHub-style heatmap + monthly day view toggle',
       'Streak: consecutive days with ≥1 capture',
-      'Review queue: Idea/Learning captures not reviewed in 7 days, max 5 shown',
+      'Review queue: Idea/Learning captures not reviewed in 7 days',
       'Tasks: due_date, priority, subtasks stored as JSON array in capture.text',
-      'Weekly summary: Mon–Sun → Claude analysis → upserted to summaries table',
-      'AI Digest embedded here (was separate tab): themes, momentum, highlights, insight, pending tasks, forgotten ideas — stored + browsable',
+      'Weekly summary: Mon–Sun → LLM analysis → upserted to summaries table',
+      'AI Digest section: themes, momentum, highlights, insight, pending tasks, forgotten ideas',
     ],
   },
   digest_tab: {
     title: 'DigestTab.tsx',
     file: 'components/DigestTab.tsx',
-    description: 'Previously a standalone tab. Now embedded as a collapsable section inside GrowthTab — no longer rendered directly from BrainClient.',
-    tech: ['Claude Sonnet 4.6', 'Supabase digest storage', 'last_reviewed_at in catalogue'],
+    description: 'AI digest view, embedded as a collapsable section inside GrowthTab.',
+    tech: ['gpt-oss-120b (Groq)', 'lib/digest.ts (shared with cron)', 'Supabase digest storage'],
     details: [
-      'Digest API returns: themes, momentum, highlights, insight, patterns, pendingTasks, forgottenIdeas, suggestion',
-      'Catalogue includes last_reviewed_at per capture so Claude can factor in recency of reviews',
+      'Digest: themes, momentum, highlights, insight, patterns, pendingTasks, forgottenIdeas, suggestion',
+      'Same lib/digest.ts powers the button and the weekly cron, so both produce the same digest',
       'Stored in Supabase digests table — history browsable, regenerate on demand',
-      'Moved into GrowthTab as collapsable section to consolidate growth/insight views',
+    ],
+  },
+  settings_tab: {
+    title: 'SettingsTab.tsx',
+    file: 'components/SettingsTab.tsx',
+    description: 'Per-user settings, export, and data deletion. Every change is saved immediately (PUT /api/settings).',
+    tech: ['user_settings table (RLS)', 'Optimistic update + rollback', 'Typed confirmation for delete'],
+    details: [
+      'Weekly digest on/off + day; review reminders: morning / afternoon / both / off; task reminders',
+      'Reminder times shown in the viewer\'s local time (cron runs at 09:00 / 14:00 UTC)',
+      'Default type / project used when AI categorization is unavailable',
+      'Export .md / .json; delete all captures requires typing a confirmation phrase (checked again on the server)',
     ],
   },
   CaptureDetailModal: {
     title: 'CaptureDetailModal.tsx',
     file: 'components/CaptureDetailModal.tsx',
-    description: 'Universal modal for viewing, editing, and deleting a capture. Used across ChatTab, GraphTab, SearchTab, and SearchOverlay — replacing per-tab inline expand logic.',
+    description: 'Universal modal for viewing, editing, and deleting a capture. Used across ChatTab, GraphTab, SearchTab, and SearchOverlay.',
     tech: ['React portal pattern', 'PATCH /api/capture/[id]', 'Shared across 4 tabs'],
     details: [
       'Modes: view → edit → confirmDelete (state machine within modal)',
-      'Edit saves via PATCH with updated title, text, type, project',
+      'Edits re-embed the capture on the server, so search stays accurate',
       'Used by: ChatTab (pinned expand), GraphTab (node click), SearchTab (result expand), SearchOverlay (result expand)',
-      'Replaces duplicated inline expand logic that was in each tab',
     ],
   },
   api_capture: {
     title: '/api/capture',
     file: 'app/api/capture/route.ts',
-    description: 'Creates a new capture. Enriches URLs, extracts YouTube transcripts, then asks Claude to assign type, project, and title.',
-    tech: ['Claude Sonnet 4.6', 'youtube-transcript pkg', 'Open Graph scraping', 'Supabase insert'],
+    description: 'Creates a new capture: enriches URLs, categorizes with an LLM, embeds with Voyage, and lets similar past captures vote on the project.',
+    tech: ['gpt-oss-20b (Groq)', 'Voyage voyage-3.5-lite', 'kNN project vote', 'youtube-transcript pkg'],
     details: [
-      'YouTube URL → full transcript + video title via youtube-transcript package',
-      'Web URL → og:title + og:description fetched from page HTML',
-      'Claude prompt: text + enriched URL content + existing project names → {type, project, title}',
-      'Inserts capture row → fires background POST /api/relate (async, doesn\'t block response)',
+      'YouTube URL → full transcript; web URL → og:title + og:description',
+      'lib/categorize.ts: strict JSON schema with enums → only valid types and existing projects; prompt lists project descriptions',
+      'Embedding of title + text (best-effort: if Voyage is down the capture is still saved)',
+      'kNN: if ≥ 3 of the 5 most similar captures share a project, it overrides the LLM (eval: kNN 75% vs LLM 63%)',
+      'Falls back to the default type / project from settings when the LLM is unavailable',
     ],
   },
   api_chat: {
     title: '/api/chat',
     file: 'app/api/chat/route.ts',
-    description: 'RAG chat: keyword-based context selection from all captures, then Claude generates a conversational response.',
-    tech: ['Claude Sonnet 4.6', 'Keyword ranking', 'Conversation history', 'Pinned context'],
+    description: 'RAG chat: vector search + reranker pick the context, then the LLM answers conversationally.',
+    tech: ['gpt-oss-120b (Groq)', 'pgvector', 'Voyage rerank-2.5', 'query_log'],
     details: [
-      'Receives: message + history[≤6] + optional pinnedCaptureId',
-      'Keyword scoring: split message → tokens, count matches per capture in title+text+type+project',
-      'Takes top 7 captures by score (8 if no pinned); pinned is always prepended',
-      'max_tokens: 600 — concise, conversational responses',
+      'Embed message → match_captures top 15 → rerank → best 8 (500 chars each) + pinned capture',
+      'Fallbacks: rerank fails → vector order; vector search fails → most recent captures',
+      'Every question is logged with retrieved ids and which fallback (if any) was used',
+      'Only the current message is embedded — vague follow-ups retrieve poorly (query rewriting is on the roadmap)',
     ],
   },
   api_search: {
     title: '/api/search',
     file: 'app/api/search/route.ts',
-    description: 'Semantic search with AI synthesis. Sends all recent captures to Claude as a text catalogue and asks for insights.',
-    tech: ['Claude Sonnet 4.6', 'Full text catalogue (100 captures)', 'JSON structured response'],
+    description: 'RAG search with synthesis: retrieves the most relevant captures, then the LLM answers with structured output.',
+    tech: ['gpt-oss-120b (Groq)', 'pgvector + Voyage rerank', 'Strict JSON schema'],
     details: [
-      'Fetches last 100 captures from DB ordered by recency',
-      'Builds catalogue: "ID | type | project | title | text[:100]" per line, joined with \\n',
-      'Claude returns: { synthesis, relevantIds[≤8], followUpQuestions[3] }',
-      'No vector embeddings — full text scan (fast enough at personal-scale knowledge bases)',
+      'Embed query → match_captures top 20 → rerank → best 12, 1,000 chars each (fits the 8K tokens/min free tier)',
+      'Returns { synthesis, relevantIds[≤8], followUpQuestions[3] }',
+      'relevantIds is an enum of the ids actually sent, so the model cannot invent ids',
+      'Retrieval eval: hit@1 83% (vector) → 100% (vector + rerank)',
     ],
   },
   api_relate: {
     title: '/api/relate',
     file: 'app/api/relate/route.ts',
-    description: 'Finds semantic connections between a new capture and existing ones, then links them bidirectionally in the DB.',
-    tech: ['Claude Sonnet 4.6', 'Bidirectional array update', 'Background trigger from capture'],
+    description: 'Links a capture to its most similar captures by cosine similarity, both ways. No LLM call.',
+    tech: ['pgvector match_captures', 'Threshold 0.71 (measured)', 'Bidirectional array update'],
     details: [
-      'Always triggered async after a new capture is saved (does not block save response)',
-      'Compares new capture vs 50 most recent other captures by full text content',
-      'Claude returns related IDs → update A.related_ids AND B.related_ids (bidirectional)',
-      'Result: undirected semantic graph stored as related_ids[] arrays in DB',
+      'Called by CaptureTab right after a save (does not block the save)',
+      'Up to 6 nearest captures with similarity ≥ 0.71 become related',
+      'Threshold chosen by F1 on 491 labelled pairs (LLM-as-judge, checked by hand)',
+      'Writes related_ids on both captures → undirected graph',
     ],
   },
   api_relate_batch: {
     title: '/api/relate/batch',
     file: 'app/api/relate/batch/route.ts',
-    description: 'Batch semantic relate: finds pairwise connections between multiple selected captures from the graph view.',
-    tech: ['Claude Sonnet 4.6', 'Pairwise comparison', 'Bulk bidirectional update'],
+    description: 'Rebuilds the whole relation graph from stored embeddings, with the same rule as /api/relate.',
+    tech: ['pgvector', 'Same threshold as single relate', 'Bulk update'],
     details: [
-      'Accepts array of captureIds selected in GraphTab batch mode',
-      'Claude reads full text of all selected captures, returns semantic pairs',
-      'Bulk update: all discovered pairs linked bidirectionally',
+      'For every capture: nearest neighbours above the threshold, linked both ways',
+      'Clears all related_ids, then writes the new adjacency',
+      'No LLM — single and batch relate can never disagree',
     ],
   },
   api_transcribe: {
     title: '/api/transcribe',
     file: 'app/api/transcribe/route.ts',
-    description: 'Transcribes uploaded audio files to text using Groq\'s Whisper model (faster and cheaper than OpenAI).',
+    description: 'Transcribes uploaded audio files to text using Groq\'s Whisper model.',
     tech: ['Groq SDK', 'whisper-large-v3', 'FormData multipart'],
     details: [
       'Accepts audio/* file via multipart FormData POST',
-      'Groq LPU (Language Processing Unit) hardware → sub-second transcription latency',
       'Returns { transcript: string }',
       'CaptureTab merges transcript with any text already typed in the input',
     ],
@@ -221,47 +230,56 @@ const NODES: Record<string, NodeDetail> = {
   api_summary: {
     title: '/api/summary/weekly',
     file: 'app/api/summary/weekly/route.ts',
-    description: 'Generates a weekly AI summary of captures. Upserted to DB for persistent week-over-week history.',
-    tech: ['Claude Sonnet 4.6', 'Supabase upsert', 'Mon–Sun date range query'],
+    description: 'Generates a weekly AI summary of captures. Upserted to DB for week-over-week history.',
+    tech: ['gpt-oss-120b (Groq)', 'Strict JSON schema', 'Supabase upsert'],
     details: [
       'Fetches all captures from Monday–Sunday of the current week',
-      'Claude returns: { highlights, themes, insight, momentum }',
-      'Upserted on unique key (user_id, week_start) — re-running same week overwrites',
-      'GrowthTab displays latest card + scrollable history of past weeks',
+      'LLM returns: { highlights, themes, insight, momentum } (momentum is an enum)',
+      'Upserted on unique key (user_id, week_start) — re-running the same week overwrites',
     ],
   },
-  claude: {
-    title: 'Claude Sonnet 4.6',
-    description: 'Anthropic AI model powering categorization, RAG chat, semantic search, semantic relate, and weekly summaries.',
-    tech: ['@anthropic-ai/sdk', '200K token context window', 'JSON output parsing', 'Anthropic API'],
+  llm: {
+    title: 'Groq · gpt-oss (lib/llm.ts)',
+    file: 'lib/llm.ts',
+    description: 'All LLM calls go through one provider-agnostic layer: generateText and generateObject. Switching provider or model is a change in this file only.',
+    tech: ['groq-sdk', 'gpt-oss-120b / gpt-oss-20b', 'Strict structured outputs', 'Free tier: 8K tokens/min'],
     details: [
-      'Used by: /api/capture, /api/chat, /api/search, /api/relate, /api/summary/weekly',
-      'All non-chat endpoints return structured JSON — prompts explicitly request JSON',
-      'Token budgets: categorize=150, relate=200, summary=400, search=500, chat=600',
-      'Cost: ~$0.003 input / $0.01 output per million tokens',
+      'generateObject: json_schema with strict: true — constrained decoding, output always matches the schema',
+      'gpt-oss is a reasoning model: max tokens include hidden reasoning; reasoning_effort "low" keeps it short',
+      'gpt-oss-20b for categorization (separate rate-limit bucket), gpt-oss-120b for everything else',
+      'Moved from Anthropic Claude to Groq when credits ran out — every route kept working unchanged',
+    ],
+  },
+  voyage: {
+    title: 'Voyage AI',
+    file: 'lib/embeddings.ts',
+    description: 'Embeddings for semantic search, relations and kNN, plus a reranker for the final ordering.',
+    tech: ['voyage-3.5-lite (1024 dim, multilingual)', 'rerank-2.5', 'input_type: query / document'],
+    details: [
+      'Picked for multilingual quality — notes mix Serbian and English',
+      'Embedding = title + first 8,000 chars; questions use input_type "query"',
+      'Reranker (cross-encoder) reads question + candidate together → hit@1 83% → 100%',
+      'Daily cron re-embeds captures saved while Voyage was unavailable (self-healing)',
     ],
   },
   groq: {
     title: 'Groq Whisper',
-    description: 'Ultra-fast speech-to-text via Groq LPU hardware. Used exclusively for audio file transcription in /api/transcribe.',
-    tech: ['groq-sdk', 'whisper-large-v3 model', 'Sub-second latency'],
+    description: 'Fast speech-to-text via Groq. Used for audio file transcription in /api/transcribe.',
+    tech: ['groq-sdk', 'whisper-large-v3 model'],
     details: [
-      'Model: whisper-large-v3 (same accuracy as OpenAI Whisper, ~10× faster)',
-      'Custom LPU hardware avoids GPU memory bottlenecks',
       'Accepts: wav, mp3, m4a, webm audio formats',
       'Not used for live voice capture — that uses browser SpeechRecognition API directly',
     ],
   },
   supabase: {
     title: 'Supabase',
-    description: 'PostgreSQL BaaS providing auth (Google OAuth), database, and row-level security. Both SSR and client SDK patterns used.',
-    tech: ['PostgreSQL', 'Google OAuth (Supabase Auth)', 'Row Level Security', '@supabase/ssr'],
+    description: 'PostgreSQL with pgvector, auth (Google OAuth), and row-level security on every table.',
+    tech: ['PostgreSQL + pgvector (HNSW)', 'Google OAuth (Supabase Auth)', 'Row Level Security', '@supabase/ssr'],
     details: [
-      'Tables: captures, projects, summaries, push_subscriptions',
-      'RLS policy: every table filtered by auth.uid() = user_id (enforced at DB level)',
-      'Auth: Google OAuth → JWT session stored in httpOnly cookie (SSR-safe)',
-      'Server client (@supabase/ssr) reads cookies from Next.js headers() — used in all API routes',
-      'Browser client (createBrowserClient) only used in BrainClient for polling sync',
+      'Tables: captures (+ embedding vector(1024)), projects (+ description), user_settings, query_log, digests, summaries, push_subscriptions',
+      'match_captures(): cosine similarity search, filtered by user_id; RLS still applies (anon gets 0 rows)',
+      'RLS policy: every table filtered by auth.uid() = user_id',
+      'Server client (@supabase/ssr) in API routes; service client only in cron jobs and data deletion',
     ],
   },
 };
@@ -281,49 +299,53 @@ type FlowStep = {
 const FLOWS: Record<FlowId, { title: string; description: string; steps: FlowStep[] }> = {
   capture: {
     title: 'Save Capture',
-    description: 'Text / voice / URL → AI categorization → DB save → background semantic linking',
+    description: 'Text / voice / URL → LLM categorization → embedding → kNN project vote → DB save → background relate',
     steps: [
-      { layer: 'frontend', component: 'CaptureTab', action: 'User submits text (or voice transcript / audio upload / URL)', data: '{ text, due_date?, source_url? }' },
-      { layer: 'api', component: '/api/capture', action: 'Enrich URL if detected in text', note: 'YouTube → full transcript; Web page → og:title + og:description from HTML' },
-      { layer: 'ai', component: 'Claude Sonnet 4.6', action: 'Categorize: assign type, project, and title', data: '← { type: "Idea"|"Task"|"Link"|"Learning"|"Note", project: "...", title: "..." }', note: 'max_tokens: 150, JSON-only response' },
-      { layer: 'db', component: 'Supabase', action: 'INSERT INTO captures', data: '{ text, title, type, project, user_id, created_at, starred: false, related_ids: [] }' },
-      { layer: 'frontend', component: 'CaptureTab', action: 'Update UI list + show "finding connections…" indicator', note: 'Local state update immediately; relate runs async in background' },
-      { layer: 'api', component: '/api/relate', action: 'Background: compare vs 50 recent captures', data: '{ captureId }', note: 'Triggered via fetch() after response already sent to client' },
-      { layer: 'ai', component: 'Claude Sonnet 4.6', action: 'Find semantically related captures', data: '← ["id1", "id2", ...]', note: 'max_tokens: 200, reads full text of all compared captures' },
-      { layer: 'db', component: 'Supabase', action: 'Bidirectional link update: related_ids on both A and B', note: 'A.related_ids += B.id AND B.related_ids += A.id' },
+      { layer: 'frontend', component: 'CaptureTab', action: 'User submits text (or voice transcript / audio upload / URL)', data: '{ text, due_date?, priority?, source_url? }' },
+      { layer: 'api', component: '/api/capture', action: 'Enrich URL if detected in text', note: 'YouTube → full transcript; web page → og:title + og:description' },
+      { layer: 'ai', component: 'Groq gpt-oss-20b', action: 'Categorize: type, project, title (strict JSON schema)', data: '← { type: enum, project: enum of existing projects, title }', note: 'Prompt lists each project with its description; falls back to settings defaults if the LLM is unavailable' },
+      { layer: 'ai', component: 'Voyage AI', action: 'Embed title + text (1024 dims)', note: 'Best-effort: the capture is saved even if this fails; the daily cron fills it in later' },
+      { layer: 'db', component: 'Supabase · pgvector', action: 'kNN: 5 most similar captures vote on the project', note: '≥ 3 of 5 agree → their project wins over the LLM (the user\'s own filing habit)' },
+      { layer: 'db', component: 'Supabase', action: 'INSERT INTO captures', data: '{ text, title, type, project, embedding, related_ids: [] }' },
+      { layer: 'frontend', component: 'CaptureTab', action: 'Show the capture + "finding connections…", then POST /api/relate', note: 'Relate runs in the background and never blocks the save' },
+      { layer: 'db', component: 'Supabase · pgvector', action: 'Link to up to 6 captures with similarity ≥ 0.71, both ways', note: 'No LLM call — threshold measured by F1 on 491 labelled pairs' },
     ],
   },
   chat: {
     title: 'Send Chat Message',
-    description: 'User message → keyword context selection → Claude RAG response',
+    description: 'Message → vector search → reranker → LLM answer with the best captures as context',
     steps: [
-      { layer: 'frontend', component: 'ChatTab', action: 'User types message (optionally with a pinned capture)', data: '{ message, history[≤6], pinnedCaptureId? }' },
-      { layer: 'api', component: '/api/chat', action: 'Keyword-rank all captures by relevance to message', note: 'Tokens = message.split(whitespace); score each capture by token matches in title+text+type+project' },
-      { layer: 'ai', component: 'Claude Sonnet 4.6', action: 'Generate conversational answer using context window', data: '[system: pinned capture? + top 7 ranked captures] + [last 6 history turns] + [current message]', note: 'max_tokens: 600' },
-      { layer: 'frontend', component: 'ChatTab', action: 'Render AI response as chat bubble', note: 'Full response at once — no streaming; appended to local history' },
-      { layer: 'db', component: 'Supabase', action: 'PATCH last_reviewed_at + sync state from server response', note: 'Awaits response → updates captures[] from server data (fixes race condition where optimistic update could diverge)' },
+      { layer: 'frontend', component: 'ChatTab', action: 'User types message (optionally with a pinned capture)', data: '{ message, history[≤6], pinnedCapture? }' },
+      { layer: 'ai', component: 'Voyage AI', action: 'Embed the message (input_type: query)' },
+      { layer: 'db', component: 'Supabase · pgvector', action: 'match_captures → 15 nearest captures (pinned one excluded)' },
+      { layer: 'ai', component: 'Voyage rerank-2.5', action: 'Re-order the 15 candidates, keep the best 8', note: 'If rerank fails → vector order; if vector search fails → most recent captures' },
+      { layer: 'db', component: 'Supabase', action: 'Log question, retrieved ids and fallback to query_log' },
+      { layer: 'ai', component: 'Groq gpt-oss-120b', action: 'Answer from pinned capture + 8 captures (500 chars each) + last 6 turns' },
+      { layer: 'frontend', component: 'ChatTab', action: 'Render the reply, or the error as a chat message' },
     ],
   },
   search: {
-    title: 'Semantic Search',
-    description: 'Query → full knowledge base scan → Claude synthesis + relevant IDs + follow-ups',
+    title: 'RAG Search',
+    description: 'Query → vector search → reranker → LLM synthesis with structured output',
     steps: [
       { layer: 'frontend', component: 'SearchTab', action: 'User enters query', data: '{ query: string }' },
-      { layer: 'db', component: 'Supabase', action: 'Fetch recent captures', data: 'SELECT * FROM captures ORDER BY created_at DESC LIMIT 100' },
-      { layer: 'api', component: '/api/search', action: 'Build catalogue string', note: 'Format each as: "id | type | project | title | text[:100]" — joined with newlines' },
-      { layer: 'ai', component: 'Claude Sonnet 4.6', action: 'Synthesize insights across full catalogue', data: '← { synthesis: "2–4 paragraphs", relevantIds[≤8], followUpQuestions[3] }', note: 'max_tokens: 500' },
-      { layer: 'frontend', component: 'SearchTab', action: 'Render synthesis + highlighted captures + follow-up buttons', note: 'Follow-up clicks auto-trigger a new search with the follow-up as query' },
+      { layer: 'ai', component: 'Voyage AI', action: 'Embed the query (input_type: query)' },
+      { layer: 'db', component: 'Supabase · pgvector', action: 'match_captures → 20 nearest captures' },
+      { layer: 'ai', component: 'Voyage rerank-2.5', action: 'Re-order the 20 candidates, keep the best 12', note: 'Eval: hit@1 83% → 100% with the reranker' },
+      { layer: 'db', component: 'Supabase', action: 'Log query, retrieved ids and fallback to query_log' },
+      { layer: 'ai', component: 'Groq gpt-oss-120b', action: 'Synthesize an answer from 12 captures (1,000 chars each)', data: '← { synthesis, relevantIds (enum of sent ids), followUpQuestions }' },
+      { layer: 'frontend', component: 'SearchTab', action: 'Render synthesis + relevant captures + follow-up buttons', note: 'Follow-up clicks trigger a new search' },
     ],
   },
   relate: {
     title: 'Batch Relate (Graph)',
-    description: 'Select captures in graph → Claude finds semantic pairs → force graph re-renders with new edges',
+    description: 'Rebuild every relation from stored embeddings → force graph re-renders with new edges',
     steps: [
-      { layer: 'frontend', component: 'GraphTab', action: 'User enters batch mode, selects captures on canvas', data: 'string[] selectedIds' },
-      { layer: 'api', component: '/api/relate/batch', action: 'Fetch all selected captures from DB', data: 'SELECT * FROM captures WHERE id IN (selectedIds)' },
-      { layer: 'ai', component: 'Claude Sonnet 4.6', action: 'Find semantic pairs among all selected captures', data: '← Array<{ a: id, b: id }>', note: 'Reads full text of each; returns pairs with genuine thematic overlap' },
-      { layer: 'db', component: 'Supabase', action: 'Bulk bidirectional update for all discovered pairs', note: 'For each pair (A,B): A.related_ids += B and B.related_ids += A' },
-      { layer: 'frontend', component: 'GraphTab', action: 'Force simulation restarts with new spring edges', note: 'New connection lines appear; node sizes update to reflect higher connection counts' },
+      { layer: 'frontend', component: 'GraphTab', action: 'User clicks "batch relate"' },
+      { layer: 'api', component: '/api/relate/batch', action: 'Load all captures that have an embedding' },
+      { layer: 'db', component: 'Supabase · pgvector', action: 'For each capture: 6 nearest with similarity ≥ 0.71', note: 'Same rule as single relate — no LLM, so the two can never disagree' },
+      { layer: 'db', component: 'Supabase', action: 'Clear related_ids, write the new undirected adjacency' },
+      { layer: 'frontend', component: 'GraphTab', action: 'Force simulation restarts with the new edges', note: 'Node sizes update to reflect connection counts' },
     ],
   },
 };
@@ -351,56 +373,82 @@ const FILE_TREE: FileNode[] = [
     name: 'app', type: 'dir', children: [
       {
         name: 'api', type: 'dir', children: [
-          { name: 'capture/route.ts', type: 'file', detail: { description: 'Enrich URL → Claude categorize → DB insert → background relate trigger', exports: ['POST'], imports: ['@anthropic-ai/sdk', 'lib/supabase/server', 'youtube-transcript'], usedBy: ['CaptureTab'] } },
-          { name: 'capture/[id]/route.ts', type: 'file', detail: { description: 'Update or delete individual capture by UUID', exports: ['PATCH', 'DELETE'], imports: ['lib/supabase/server'], usedBy: ['CaptureTab', 'ChatTab', 'GrowthTab'] } },
-          { name: 'chat/route.ts', type: 'file', detail: { description: 'RAG chat: keyword context selection → Claude conversational response', exports: ['POST'], imports: ['@anthropic-ai/sdk', 'lib/supabase/server'], usedBy: ['ChatTab'] } },
-          { name: 'search/route.ts', type: 'file', detail: { description: 'Semantic search: full catalogue scan → Claude synthesis + IDs + follow-ups', exports: ['POST'], imports: ['@anthropic-ai/sdk', 'lib/supabase/server'], usedBy: ['SearchTab'] } },
-          { name: 'relate/route.ts', type: 'file', detail: { description: 'Single-capture semantic relate → bidirectional link in DB', exports: ['POST'], imports: ['@anthropic-ai/sdk', 'lib/supabase/server'], usedBy: ['/api/capture (background call)'] } },
-          { name: 'relate/batch/route.ts', type: 'file', detail: { description: 'Batch semantic relate for multiple selected captures', exports: ['POST'], imports: ['@anthropic-ai/sdk', 'lib/supabase/server'], usedBy: ['GraphTab'] } },
+          { name: 'capture/route.ts', type: 'file', detail: { description: 'Enrich URL → LLM categorize → embed → kNN project vote → DB insert', exports: ['POST'], imports: ['lib/categorize', 'lib/embeddings', 'lib/settings', 'youtube-transcript'], usedBy: ['CaptureTab'] } },
+          { name: 'capture/[id]/route.ts', type: 'file', detail: { description: 'Update (re-embeds when text changes) or delete a capture', exports: ['PUT', 'PATCH', 'DELETE'], imports: ['lib/embeddings', 'lib/captures'], usedBy: ['CaptureTab', 'ChatTab', 'GrowthTab', 'CaptureDetailModal'] } },
+          { name: 'chat/route.ts', type: 'file', detail: { description: 'RAG chat: embed → pgvector → rerank → LLM answer; logs the query', exports: ['POST'], imports: ['lib/embeddings', 'lib/llm', 'lib/queryLog'], usedBy: ['ChatTab'] } },
+          { name: 'search/route.ts', type: 'file', detail: { description: 'RAG search: embed → pgvector → rerank → structured LLM synthesis; logs the query', exports: ['POST'], imports: ['lib/embeddings', 'lib/llm', 'lib/queryLog'], usedBy: ['SearchTab'] } },
+          { name: 'relate/route.ts', type: 'file', detail: { description: 'Link one capture to similar ones (cosine ≥ 0.71), both ways', exports: ['POST'], imports: ['lib/embeddings'], usedBy: ['CaptureTab (after save)'] } },
+          { name: 'relate/batch/route.ts', type: 'file', detail: { description: 'Rebuild all relations from stored embeddings', exports: ['POST'], imports: ['lib/embeddings'], usedBy: ['GraphTab'] } },
           { name: 'projects/route.ts', type: 'file', detail: { description: 'List all projects (GET) and create new project (POST)', exports: ['GET', 'POST'], imports: ['lib/supabase/server'], usedBy: ['BrainClient', 'CaptureTab'] } },
           { name: 'transcribe/route.ts', type: 'file', detail: { description: 'Audio file → Groq whisper-large-v3 → transcript string', exports: ['POST'], imports: ['groq-sdk'], usedBy: ['CaptureTab'] } },
-          { name: 'summary/weekly/route.ts', type: 'file', detail: { description: 'Mon–Sun captures → Claude analysis → summaries table upsert', exports: ['POST'], imports: ['@anthropic-ai/sdk', 'lib/supabase/server'], usedBy: ['GrowthTab'] } },
-          { name: 'digest/route.ts', type: 'file', detail: { description: 'AI digest: last 80 captures → Claude analysis → themes, momentum, highlights, insight, pendingTasks, forgottenIdeas. Stored in digests table.', exports: ['GET', 'POST'], imports: ['@anthropic-ai/sdk', 'lib/supabase/server'], usedBy: ['GrowthTab (via embedded DigestTab section)'] } },
+          { name: 'summary/weekly/route.ts', type: 'file', detail: { description: 'Mon–Sun captures → structured LLM analysis → summaries upsert', exports: ['GET', 'POST'], imports: ['lib/llm'], usedBy: ['GrowthTab'] } },
+          { name: 'digest/route.ts', type: 'file', detail: { description: 'Digest history (GET) and on-demand generation via lib/digest (POST)', exports: ['GET', 'POST'], imports: ['lib/digest', 'lib/llm'], usedBy: ['GrowthTab (DigestTab section)'] } },
+          { name: 'settings/route.ts', type: 'file', detail: { description: 'Read / validate and upsert user settings', exports: ['GET', 'PUT'], imports: ['lib/settings'], usedBy: ['SettingsTab'] } },
+          { name: 'account/data/route.ts', type: 'file', detail: { description: 'Delete all captures, digests, summaries and query log (requires the confirmation phrase)', exports: ['DELETE'], imports: ['lib/settings', 'lib/supabase/server'], usedBy: ['SettingsTab'] } },
           { name: 'push/subscribe/route.ts', type: 'file', detail: { description: 'Store VAPID Web Push subscription object in push_subscriptions table', exports: ['POST'], imports: ['lib/supabase/server'], usedBy: ['BrainClient'] } },
-          { name: 'cron/review-reminder/route.ts', type: 'file', detail: { description: 'Cron job: send push to users whose Learnings/Ideas are due for spaced review', exports: ['GET'], imports: ['web-push', 'lib/supabase/server'], usedBy: ['Vercel Cron (daily)'] } },
-          { name: 'cron/task-due/route.ts', type: 'file', detail: { description: 'Cron job: send push to users with tasks due today', exports: ['GET'], imports: ['web-push', 'lib/supabase/server'], usedBy: ['Vercel Cron (daily)'] } },
+          { name: 'cron/review-reminder/route.ts', type: 'file', detail: { description: 'Cron 09:00 + 14:00 UTC: review reminders for users who chose that run; weekly digest on each user\'s chosen day (idempotent)', exports: ['GET'], imports: ['web-push', 'lib/settings', 'lib/digest'], usedBy: ['Vercel Cron'] } },
+          { name: 'cron/task-due/route.ts', type: 'file', detail: { description: 'Cron 10:00 UTC: push for tasks due tomorrow; embeds captures that are missing an embedding', exports: ['GET'], imports: ['web-push', 'lib/settings', 'lib/embeddings'], usedBy: ['Vercel Cron'] } },
           { name: 'auth/callback/route.ts', type: 'file', detail: { description: 'Google OAuth callback: exchange PKCE code for session cookie', exports: ['GET'], imports: ['lib/supabase/server'], usedBy: ['Supabase Auth redirect'] } },
         ],
       },
-      { name: 'brain/page.tsx', type: 'file', detail: { description: 'Server component: verifies auth, fetches initial captures from DB, renders BrainClient as client island', exports: ['default (page)'], imports: ['lib/supabase/server', 'components/BrainClient'], usedBy: ['Next.js router (/brain)'] } },
+      { name: 'brain/page.tsx', type: 'file', detail: { description: 'Server component: verifies auth, fetches initial captures (CAPTURE_COLUMNS, no embeddings), renders BrainClient', exports: ['default (page)'], imports: ['lib/supabase/server', 'lib/captures', 'components/BrainClient'], usedBy: ['Next.js router (/brain)'] } },
       { name: 'login/page.tsx', type: 'file', detail: { description: 'Login page with Google OAuth button. Redirects to /brain on success.', exports: ['default (page)'], imports: ['lib/supabase/server'], usedBy: ['Next.js router (/login)'] } },
       { name: 'layout.tsx', type: 'file', detail: { description: 'Root layout: JetBrains Mono font, CSS variables, PWA metadata', exports: ['default', 'metadata'], imports: ['next/font/google', 'app/globals.css'], usedBy: ['Next.js (wraps all pages)'] } },
       { name: 'manifest.ts', type: 'file', detail: { description: 'PWA manifest: app name, icons, display:standalone, theme color', exports: ['default'], imports: [], usedBy: ['Next.js (auto-serves /manifest.webmanifest)'] } },
-      { name: 'globals.css', type: 'file', detail: { description: 'Tailwind imports, CSS custom properties, scrollbar styling, global utility classes (.no-scrollbar, .glow-amber, etc.)', exports: [], imports: [], usedBy: ['app/layout.tsx'] } },
+      { name: 'globals.css', type: 'file', detail: { description: 'Tailwind imports, CSS custom properties, scrollbar styling, global utility classes', exports: [], imports: [], usedBy: ['app/layout.tsx'] } },
     ],
   },
   {
     name: 'components', type: 'dir', children: [
-      { name: 'BrainClient.tsx', type: 'file', detail: { description: 'Hub: owns captures/projects state, 6 tabs (no DigestTab — merged into GrowthTab), auth, visibility polling, SW notification routing, Cmd+K', exports: ['default', 'Capture (type)', 'Project (type)', 'TYPE_COLORS'], imports: ['lib/supabase/client', 'All tab components', 'CaptureDetailModal', 'SearchOverlay'], usedBy: ['app/brain/page.tsx'] } },
-      { name: 'CaptureTab.tsx', type: 'file', detail: { description: 'Create + browse captures: text/voice/URL/audio input, template buttons, filter/sort/expand/edit/delete', exports: ['default'], imports: ['BrainClient (Capture, Project types)'], usedBy: ['BrainClient'] } },
-      { name: 'ChatTab.tsx', type: 'file', detail: { description: 'RAG chat: pinned context mode, conversation history, context capture display, mark-reviewed button', exports: ['default'], imports: ['BrainClient (Capture type)', 'CaptureDetailModal'], usedBy: ['BrainClient'] } },
-      { name: 'SearchTab.tsx', type: 'file', detail: { description: 'Semantic search UI: query input → synthesis display → relevant capture cards → follow-up question buttons', exports: ['default'], imports: ['BrainClient (Capture type)', 'CaptureDetailModal'], usedBy: ['BrainClient'] } },
-      { name: 'GraphTab.tsx', type: 'file', detail: { description: 'Force-directed knowledge graph: custom physics sim, canvas pan/zoom, batch relate, project/type filters', exports: ['default'], imports: ['BrainClient (Capture, Project types)', 'CaptureDetailModal'], usedBy: ['BrainClient'] } },
-      { name: 'GrowthTab.tsx', type: 'file', detail: { description: '52-week heatmap, streak, spaced rep queue, task manager, weekly AI summary, and AI digest — all as collapsable sections in one view', exports: ['default'], imports: ['BrainClient (Capture type)'], usedBy: ['BrainClient'] } },
-      { name: 'DigestTab.tsx', type: 'file', detail: { description: 'AI digest logic (themes, momentum, highlights, insight, pendingTasks, forgottenIdeas). No longer a standalone tab — embedded as a collapsable section inside GrowthTab.', exports: ['default'], imports: ['BrainClient (Capture type)'], usedBy: ['GrowthTab (collapsable section)'] } },
-      { name: 'CaptureDetailModal.tsx', type: 'file', detail: { description: 'Universal expand/edit/delete modal replacing per-tab inline logic. Shared across ChatTab, GraphTab, SearchTab, and SearchOverlay.', exports: ['default'], imports: ['BrainClient (Capture type)'], usedBy: ['ChatTab', 'GraphTab', 'SearchTab', 'SearchOverlay'] } },
-      { name: 'SearchOverlay.tsx', type: 'file', detail: { description: 'Cmd+K quick-search modal: instant client-side filter across captures by text/title/type/project', exports: ['default'], imports: ['BrainClient (Capture, Project types)', 'CaptureDetailModal'], usedBy: ['BrainClient'] } },
-      { name: 'ArchitectureTab.tsx', type: 'file', detail: { description: 'Desktop-only system explorer: Overview, Data Flows, File Tree, AI Pipeline views. Visual documentation of the entire app.', exports: ['default'], imports: [], usedBy: ['BrainClient'] } },
+      { name: 'BrainClient.tsx', type: 'file', detail: { description: 'Hub: owns captures/projects state, tabs + settings, auth, background sync, SW notification routing, Cmd+K', exports: ['default', 'Capture (type)', 'Project (type)', 'TYPE_COLORS'], imports: ['lib/supabase/client', 'lib/captures', 'All tab components', 'SearchOverlay'], usedBy: ['app/brain/page.tsx'] } },
+      { name: 'CaptureTab.tsx', type: 'file', detail: { description: 'Create + browse captures: text/voice/URL/audio input, templates, filter/sort/edit/delete, export, triggers relate', exports: ['default'], imports: ['BrainClient (types)', 'lib/export'], usedBy: ['BrainClient'] } },
+      { name: 'ChatTab.tsx', type: 'file', detail: { description: 'Chat UI: pinned context mode, conversation history, mark-reviewed button, error messages', exports: ['default'], imports: ['BrainClient (Capture type)', 'CaptureDetailModal'], usedBy: ['BrainClient'] } },
+      { name: 'SearchTab.tsx', type: 'file', detail: { description: 'Search UI: query → synthesis → relevant capture cards → follow-up question buttons', exports: ['default'], imports: ['BrainClient (Capture type)', 'CaptureDetailModal'], usedBy: ['BrainClient'] } },
+      { name: 'GraphTab.tsx', type: 'file', detail: { description: 'Force-directed knowledge graph: custom physics sim, canvas pan/zoom, batch relate, project/type filters', exports: ['default'], imports: ['BrainClient (types)', 'CaptureDetailModal'], usedBy: ['BrainClient'] } },
+      { name: 'GrowthTab.tsx', type: 'file', detail: { description: 'Heatmap, streak, review queue, tasks, weekly summary and AI digest as collapsable sections', exports: ['default'], imports: ['BrainClient (Capture type)'], usedBy: ['BrainClient'] } },
+      { name: 'DigestTab.tsx', type: 'file', detail: { description: 'AI digest view, embedded as a section inside GrowthTab', exports: ['default'], imports: ['BrainClient (Capture type)'], usedBy: ['GrowthTab'] } },
+      { name: 'SettingsTab.tsx', type: 'file', detail: { description: 'Settings: notifications, default type/project, export, delete all captures', exports: ['default'], imports: ['lib/settings', 'lib/export'], usedBy: ['BrainClient'] } },
+      { name: 'CaptureDetailModal.tsx', type: 'file', detail: { description: 'Universal view/edit/delete modal shared across ChatTab, GraphTab, SearchTab, and SearchOverlay', exports: ['default'], imports: ['BrainClient (Capture type)'], usedBy: ['ChatTab', 'GraphTab', 'SearchTab', 'SearchOverlay'] } },
+      { name: 'SearchOverlay.tsx', type: 'file', detail: { description: 'Cmd+K quick-search modal: instant client-side filter (all words must match)', exports: ['default'], imports: ['BrainClient (types)', 'CaptureDetailModal'], usedBy: ['BrainClient'] } },
+      { name: 'ArchitectureTab.tsx', type: 'file', detail: { description: 'This page: Overview, Data Flows, File Tree, AI Pipeline views', exports: ['default'], imports: [], usedBy: ['BrainClient', 'app/arch'] } },
     ],
   },
   {
     name: 'lib', type: 'dir', children: [
+      { name: 'llm.ts', type: 'file', detail: { description: 'Provider-agnostic LLM layer: generateText / generateObject (strict JSON schema). Currently Groq gpt-oss.', exports: ['generateText', 'generateObject', 'isRateLimited', 'MODELS'], imports: ['groq-sdk'], usedBy: ['chat, search, summary, digest routes', 'lib/categorize', 'lib/digest'] } },
+      { name: 'embeddings.ts', type: 'file', detail: { description: 'Voyage embeddings + reranker, relate threshold, self-healing fill of missing embeddings', exports: ['embed', 'embedOne', 'rerank', 'fillMissingEmbeddings', 'RELATE_THRESHOLD'], imports: [], usedBy: ['capture, chat, search, relate routes', 'cron/task-due'] } },
+      { name: 'categorize.ts', type: 'file', detail: { description: 'LLM categorization with project descriptions + kNN project vote; shared with the eval', exports: ['categorizeCapture', 'projectFromNeighbors'], imports: ['lib/llm'], usedBy: ['/api/capture', 'eval/categorize-eval.mts'] } },
+      { name: 'digest.ts', type: 'file', detail: { description: 'Digest generation (numbered captures instead of UUIDs to save tokens); shared by button and cron', exports: ['createDigest'], imports: ['lib/llm'], usedBy: ['/api/digest', 'cron/review-reminder'] } },
+      { name: 'settings.ts', type: 'file', detail: { description: 'Settings types, defaults, validation, getSettings', exports: ['getSettings', 'parseSettings', 'DEFAULT_SETTINGS'], imports: [], usedBy: ['/api/settings', 'cron jobs', '/api/capture', 'SettingsTab'] } },
+      { name: 'queryLog.ts', type: 'file', detail: { description: 'Log search/chat questions, retrieved ids and fallback stage (never throws)', exports: ['logQuery'], imports: [], usedBy: ['/api/search', '/api/chat'] } },
+      { name: 'captures.ts', type: 'file', detail: { description: 'CAPTURE_COLUMNS — everything except the embedding vector', exports: ['CAPTURE_COLUMNS'], imports: [], usedBy: ['brain/page', 'BrainClient', 'capture routes'] } },
+      { name: 'export.ts', type: 'file', detail: { description: 'Download captures as Markdown or JSON', exports: ['exportJSON', 'exportMarkdown'], imports: [], usedBy: ['CaptureTab', 'SettingsTab'] } },
       {
         name: 'supabase', type: 'dir', children: [
-          { name: 'client.ts', type: 'file', detail: { description: 'createBrowserClient — client-side Supabase instance using browser cookies (for BrainClient polling)', exports: ['createClient'], imports: ['@supabase/ssr'], usedBy: ['BrainClient'] } },
-          { name: 'server.ts', type: 'file', detail: { description: 'createServerClient — server-side Supabase that reads cookies from Next.js headers() (for API routes + server pages)', exports: ['createClient'], imports: ['@supabase/ssr', 'next/headers'], usedBy: ['All API routes', 'Server pages', 'middleware.ts'] } },
+          { name: 'client.ts', type: 'file', detail: { description: 'createBrowserClient — client-side Supabase instance (BrainClient sync)', exports: ['createClient'], imports: ['@supabase/ssr'], usedBy: ['BrainClient'] } },
+          { name: 'server.ts', type: 'file', detail: { description: 'createServerClient (cookies, RLS) and createServiceClient (cron jobs, data deletion)', exports: ['createClient', 'createServiceClient'], imports: ['@supabase/ssr', 'next/headers'], usedBy: ['All API routes', 'Server pages', 'middleware.ts'] } },
         ],
       },
     ],
   },
-  { name: 'middleware.ts', type: 'file', detail: { description: 'Auth guard: unauthenticated requests to /brain → redirect to /login; passes /auth/callback through unchanged', exports: ['middleware', 'config (matcher)'], imports: ['lib/supabase/server', 'next/server'], usedBy: ['Next.js (auto-applied to all matched routes)'] } },
-  { name: 'public/sw.js', type: 'file', detail: { description: 'Service Worker: displays push notifications with actions; routes clicks via postMessage back to the React app', exports: [], imports: [], usedBy: ['BrainClient (navigator.serviceWorker.register("/sw.js"))'] } },
-  { name: 'vercel.json', type: 'file', detail: { description: 'Vercel deployment config: two daily cron jobs (review-reminder + task-due) scheduled via crons array', exports: [], imports: [], usedBy: ['Vercel deployment platform'] } },
+  {
+    name: 'eval', type: 'dir', children: [
+      { name: 'retrieval-eval.mjs', type: 'file', detail: { description: 'Golden dataset (26 questions) → keyword / BM25 / vector / hybrid / rerank; hit@1, hit@3, recall@5, MRR', exports: [], imports: ['eval/ranking.mjs'], usedBy: ['node (manual runs)'] } },
+      { name: 'categorize-eval.mts', type: 'file', detail: { description: 'Categorization accuracy vs stored labels; LLM, few-shot, and the production kNN rule', exports: [], imports: ['lib/categorize', 'lib/llm'], usedBy: ['npx tsx (manual runs)'] } },
+      { name: 'README.md', type: 'file', detail: { description: 'Methodology and dated results log for every eval run', exports: [], imports: [], usedBy: ['humans'] } },
+    ],
+  },
+  {
+    name: 'supabase', type: 'dir', children: [
+      { name: 'pgvector-setup.sql', type: 'file', detail: { description: 'vector extension, embedding column, HNSW index, match_captures()', exports: [], imports: [], usedBy: ['Supabase SQL editor (once)'] } },
+      { name: 'settings-and-query-log.sql', type: 'file', detail: { description: 'user_settings and query_log tables with RLS', exports: [], imports: [], usedBy: ['Supabase SQL editor (once)'] } },
+      { name: 'project-descriptions.sql', type: 'file', detail: { description: 'projects.description column + descriptions for the categorization prompt', exports: [], imports: [], usedBy: ['Supabase SQL editor (once)'] } },
+    ],
+  },
+  { name: 'scripts/backfill-embeddings.mjs', type: 'file', detail: { description: 'One-off backfill of embeddings, batched to respect Voyage rate limits', exports: [], imports: ['@supabase/supabase-js'], usedBy: ['node (manual run)'] } },
+  { name: 'middleware.ts', type: 'file', detail: { description: 'Auth guard: unauthenticated requests to /brain → redirect to /login', exports: ['middleware', 'config (matcher)'], imports: ['lib/supabase/server', 'next/server'], usedBy: ['Next.js (auto-applied to all matched routes)'] } },
+  { name: 'public/sw.js', type: 'file', detail: { description: 'Service Worker: displays push notifications; routes clicks via postMessage back to the React app', exports: [], imports: [], usedBy: ['BrainClient (navigator.serviceWorker.register("/sw.js"))'] } },
+  { name: 'vercel.json', type: 'file', detail: { description: 'Cron jobs: review-reminder at 09:00 and 14:00 UTC, task-due at 10:00 UTC', exports: [], imports: [], usedBy: ['Vercel deployment platform'] } },
   { name: 'next.config.ts', type: 'file', detail: { description: 'Next.js build configuration (minimal)', exports: ['default'], imports: [], usedBy: ['Next.js build process'] } },
 ];
 
@@ -418,230 +466,187 @@ const AI_PIPELINES: Record<AIFlowId, {
   title: string;
   route: string;
   model: string;
-  maxTokens: number;
+  maxTokens: number | null;
   description: string;
   steps: PipelineStep[];
 }> = {
   categorize: {
     title: 'Capture Categorization',
     route: '/api/capture',
-    model: 'claude-sonnet-4-6',
-    maxTokens: 150,
-    description: 'Assigns type, project name, and short title to every new capture',
+    model: 'gpt-oss-20b + kNN',
+    maxTokens: 600,
+    description: 'Type, project and title for every new capture: LLM with a strict schema, then similar past captures can overrule the project',
     steps: [
-      { label: 'Context gathered', type: 'input', content: `capture.text  (what the user typed / spoke)
+      { label: 'Context gathered', type: 'input', content: `capture text (first 4,000 chars)
 
-URL enrichment (if URL detected in text):
-  YouTube → full transcript via youtube-transcript pkg
-  Web page  → og:title + og:description from page HTML
+URL enrichment (if URL detected):
+  YouTube → transcript via youtube-transcript
+  Web page → og:title + og:description
 
-DB query: existing project names for this user` },
-      { label: 'System prompt', type: 'system', content: `You are a personal knowledge assistant.
-Categorize this capture and return ONLY valid JSON.
-
-Available types: Idea | Link | Task | Learning | Note
-Existing projects: {projectNames.join(", ")}
-
-Return exactly: {"type":"...","project":"...","title":"..."}
-Use an existing project name or invent a short new one.` },
-      { label: 'User message', type: 'user', content: `{captureText}
-
-{enrichedURLContent  // appended if URL was enriched}` },
-      { label: 'Model response', type: 'response', content: `{"type": "Learning", "project": "React", "title": "Concurrent features in React 19"}` },
-      { label: 'Parse → store → trigger relate', type: 'store', content: `const { type, project, title } = JSON.parse(response.content[0].text)
-
-INSERT INTO captures {
-  text, title, type, project, user_id,
-  created_at: now(), starred: false, related_ids: []
+DB: the user's projects with their descriptions` },
+      { label: 'System prompt', type: 'system', content: `You categorize entries in a personal knowledge base.
+- type: "Learning" = something learned or explained; "Idea" = an idea or plan
+  to maybe do; "Task" = a concrete to-do; "Link" = mainly a saved URL/resource;
+  "Note" = personal facts, logs, status updates
+- project: the project this belongs to:
+  - FON: fakultet kao takav: study planovi, predmeti, kolokvijumi, diplomski
+  - Software Engineering: opšte programiranje van projekata ...
+  - AI Engineering: AI i ML: LLM-ovi, RAG, agenti ...
+  - ... (one line per project, from projects.description)
+- title: short and descriptive, max 60 chars, same language as the text` },
+      { label: 'Schema (strict)', type: 'user', content: `response_format: json_schema, strict: true   // constrained decoding
+{
+  type:    { enum: ["Idea","Link","Task","Learning","Note"] },
+  project: { enum: [...existing project names] },   // can't invent a project
+  title:   { type: "string" }
 }
+reasoning_effort: "low"   // gpt-oss thinks before answering; keep it short` },
+      { label: 'Model response', type: 'response', content: `{"type": "Learning", "project": "Software Engineering", "title": "Mockito: doThrow za void metode"}` },
+      { label: 'Embed → kNN vote → store', type: 'store', content: `embedding = Voyage(title + text)
 
-// async, non-blocking:
-fetch("/api/relate", { method:"POST", body: { captureId } })` },
+// the user's own filing habit beats the LLM's guess
+neighbours = match_captures(embedding, 5)
+if ≥ 3 of 5 share a project → use it
+
+INSERT INTO captures { text, title, type, project, embedding }
+
+Eval (120 captures): LLM 63% · kNN 75% · this rule 73%
+(kept over plain kNN: kNN can't pick a project with no captures yet)` },
     ],
   },
   chat: {
     title: 'RAG Chat',
     route: '/api/chat',
-    model: 'claude-sonnet-4-6',
-    maxTokens: 600,
-    description: 'Keyword-based context retrieval from captures + conversational Claude response',
+    model: 'gpt-oss-120b',
+    maxTokens: 1500,
+    description: 'Vector search + reranker pick the context, the LLM answers conversationally',
     steps: [
-      { label: 'Context selection algorithm', type: 'input', content: `Receive: { message, history[≤6 turns], pinnedCaptureId? }
+      { label: 'Retrieval', type: 'input', content: `Receive: { message, history[≤6], pinnedCapture? }
 
-// Keyword scoring
-const tokens = message.split(/\s+/)
-for each capture:
-  score = count how many tokens appear in
-          capture.title + capture.text +
-          capture.type + capture.project
+q = Voyage.embed(message, input_type: "query")
+candidates = match_captures(q, 15, exclude: pinned)
+context = Voyage.rerank(message, candidates) → best 8
 
-Sort captures by score DESC
-Take top 7  (top 8 if no pinned capture)
-Prepend pinnedCapture at position 0 (always)` },
-      { label: 'System prompt', type: 'system', content: `You are a helpful second brain assistant.
-Answer the user's question based on their personal knowledge base.
+fallback: rerank fails → vector order
+          vector fails → 8 most recent captures
+log: query_log { query, retrieved_ids, fallback }` },
+      { label: 'System prompt', type: 'system', content: `You are a helpful assistant for a personal knowledge base.
+Answer concisely based on the user's captures, in the language the
+user writes in. If the answer isn't in the captures, say so briefly.
 
-${`[PINNED CAPTURE — answer primarily about this]:
-{pinnedCapture.title}
-{pinnedCapture.text}
+[pinned capture, up to 2,000 chars — "this" / "it" means this one]
 
-`}[RELATED CONTEXT FROM KNOWLEDGE BASE]:
-{topCaptures.map(c => c.title + "\\n" + c.text).join("\\n---\\n")}` },
-      { label: 'User message + history', type: 'user', content: `// messages array sent to Claude:
-[
-  { role: "user",      content: "<turn 1>" },
-  { role: "assistant", content: "<turn 1 reply>" },
-  ...up to 6 turns...
-  { role: "user",      content: "{currentMessage}" }  // ← current
+Additional captures from their knowledge base:
+[type][project] title: first 500 chars   × 8` },
+      { label: 'Messages', type: 'user', content: `[
+  ...last 6 turns of history,
+  { role: "user", content: message }
 ]` },
-      { label: 'Model response', type: 'response', content: `Plain text answer — NOT JSON.
-Conversational tone, references the provided context.
-Max 600 tokens.` },
-      { label: 'Display + optionally mark reviewed', type: 'parse', content: `No parsing — plain text rendered directly.
-Appended to local chatHistory state in ChatTab.
+      { label: 'Model response', type: 'response', content: `Plain text answer (no schema).
+Rate limit → { error: "AI is busy (free tier limit)…" }, shown in the chat.` },
+      { label: 'Display', type: 'parse', content: `Appended to local chat history in ChatTab.
 
-If user clicks "Mark Reviewed":
-  PATCH /api/capture/{pinnedId}
-  body: { last_reviewed_at: new Date().toISOString() }` },
+"Mark Reviewed" on a pinned capture:
+  PATCH /api/capture/{id}  { last_reviewed_at: now }` },
     ],
   },
   search: {
-    title: 'Semantic Search',
+    title: 'RAG Search',
     route: '/api/search',
-    model: 'claude-sonnet-4-6',
-    maxTokens: 500,
-    description: 'Synthesizes insights across the full knowledge base for a given query',
+    model: 'gpt-oss-120b',
+    maxTokens: 2500,
+    description: 'Answers a question from the 12 most relevant captures, with a strict output schema',
     steps: [
-      { label: 'Catalogue build', type: 'input', content: `SELECT id, type, project, title, text
-  FROM captures
-  WHERE user_id = $uid
-  ORDER BY created_at DESC
-  LIMIT 100
+      { label: 'Retrieval', type: 'input', content: `q = Voyage.embed(query, input_type: "query")
+candidates = match_captures(q, 20)          // pgvector, cosine
+captures = Voyage.rerank(query, candidates) → best 12
 
-// Format each capture as one line:
-const catalogue = captures.map(c =>
-  \`\${c.id} | \${c.type} | \${c.project} | \${c.title} | \${c.text.slice(0,100)}\`
-).join("\\n")` },
-      { label: 'System prompt', type: 'system', content: `You are a second brain assistant analyzing the user's personal knowledge base.
+catalogue = "[id] [type/project] title: first 1,000 chars"  × 12
+// 12 × 1,000 chars ≈ 4K tokens → fits Groq's 8K tokens/min
 
-KNOWLEDGE BASE:
-{catalogue}` },
-      { label: 'User message', type: 'user', content: `Query: {userQuery}
-
-Return JSON (no other text):
-{
-  "synthesis":         "2–4 paragraphs of insight",
-  "relevantIds":       ["id1", "id2", ...],  // max 8
-  "followUpQuestions": ["Q1?", "Q2?", "Q3?"]
+Retrieval eval: hit@1 vector 83% → vector + rerank 100%` },
+      { label: 'System prompt', type: 'system', content: `You are a personal knowledge assistant. Given the user's knowledge
+captures and a query, synthesize a thoughtful answer drawing from their
+captures. Answer in the language of the query.
+- synthesis: 2-4 paragraphs
+- relevantIds: ids of the most relevant captures (max 8), most relevant first
+- followUpQuestions: 3 follow-up questions` },
+      { label: 'Schema (strict)', type: 'user', content: `{
+  synthesis:         { type: "string" },
+  relevantIds:       { items: { enum: [...ids actually sent] } },  // no invented ids
+  followUpQuestions: { items: { type: "string" } }
 }` },
       { label: 'Model response', type: 'response', content: `{
-  "synthesis": "Based on your notes, the main themes around X are...",
-  "relevantIds": ["abc123", "def456", "ghi789"],
-  "followUpQuestions": [
-    "How does X relate to Y in your recent work?",
-    "What patterns have emerged across these captures?",
-    "What would be your next step given these insights?"
-  ]
+  "synthesis": "Kada testirate void metodu koja treba da baci izuzetak...",
+  "relevantIds": ["0bf22ca1-…", "13f3aebb-…"],
+  "followUpQuestions": ["…", "…", "…"]
 }` },
-      { label: 'Parse → render', type: 'parse', content: `const { synthesis, relevantIds, followUpQuestions } = JSON.parse(res)
-
-→ Render synthesis text block prominently at top
-→ Filter capture list to show only relevantIds (highlighted)
-→ Render 3 follow-up buttons below synthesis
-   onClick: setQuery(q) + submit → new search cycle` },
+      { label: 'Render', type: 'parse', content: `→ synthesis at the top
+→ relevant captures as cards (open in CaptureDetailModal)
+→ 3 follow-up buttons: onClick → new search` },
     ],
   },
   relate: {
     title: 'Semantic Relate',
     route: '/api/relate',
-    model: 'claude-sonnet-4-6',
-    maxTokens: 200,
-    description: 'Discovers semantically similar captures and links them bidirectionally in the DB',
+    model: 'voyage-3.5-lite + pgvector',
+    maxTokens: null,
+    description: 'Links captures by embedding similarity — no LLM call (it used to be an LLM call over the 50 most recent captures)',
     steps: [
-      { label: 'Data fetch', type: 'input', content: `// Target capture
-SELECT * FROM captures WHERE id = captureId
+      { label: 'Embedding', type: 'input', content: `target.embedding  (stored at save time; computed now if missing)` },
+      { label: 'Similarity search', type: 'system', content: `match_captures(target.embedding, 6, exclude: target)
+→ [{ id, similarity }]   // cosine similarity, 0..1` },
+      { label: 'Threshold (measured, not guessed)', type: 'user', content: `keep similarity ≥ 0.71
 
-// Comparison pool
-SELECT id, type, project, title, text
-  FROM captures
-  WHERE id != captureId AND user_id = $uid
-  ORDER BY created_at DESC
-  LIMIT 50` },
-      { label: 'System prompt', type: 'system', content: `You are a second brain assistant.
-Find which captures are semantically related to the target.
-Return ONLY a JSON array of IDs — no other text.` },
-      { label: 'User message', type: 'user', content: `TARGET:
-{id} | {type} | {project} | {title} | {text}
+How 0.71 was picked:
+  491 candidate pairs labelled related / unrelated (LLM-as-judge,
+  checked by hand on 20 pairs: 17/20 agreement)
+  best F1 at 0.71 → precision 70%, recall 82%
+Capture↔capture scores run much higher than question↔capture,
+so search doesn't reuse this threshold.` },
+      { label: 'Result', type: 'response', content: `["abc123…", "def456…"]   // or [] if nothing is close enough` },
+      { label: 'Bidirectional DB update', type: 'store', content: `target.related_ids = relatedIds
+for each related capture:
+  related.related_ids += target.id   // undirected graph
 
-COMPARE AGAINST:
-{id1} | {type} | {project} | {title} | {text}
-{id2} | ...
-...
-
-Return: ["id3", "id7"]
-Only include captures with genuine thematic or conceptual overlap.` },
-      { label: 'Model response', type: 'response', content: `["abc123", "def456"]
-// or [] if no meaningful connections found` },
-      { label: 'Bidirectional DB update', type: 'store', content: `const relatedIds = JSON.parse(response)
-
-for (const relatedId of relatedIds) {
-  // Add relatedId to target's related_ids array
-  await supabase.rpc("array_append_unique",
-    { row_id: captureId, value: relatedId })
-
-  // Add target to related capture's array (bidirectional)
-  await supabase.rpc("array_append_unique",
-    { row_id: relatedId, value: captureId })
-}
-// Result: undirected semantic graph stored in related_ids[]` },
+Batch relate (/api/relate/batch) applies the same rule to every capture.` },
     ],
   },
   summary: {
     title: 'Weekly Summary',
     route: '/api/summary/weekly',
-    model: 'claude-sonnet-4-6',
-    maxTokens: 400,
-    description: 'Analyzes the week\'s captures and generates personal growth insights',
+    model: 'gpt-oss-120b',
+    maxTokens: 1500,
+    description: 'Analyzes the week\'s captures; the digest (lib/digest.ts) follows the same pattern',
     steps: [
-      { label: 'Weekly data fetch', type: 'input', content: `// Calculate Monday 00:00 and Sunday 23:59 for current week
-const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 })
-const weekEnd   = endOfWeek(new Date(), { weekStartsOn: 1 })
+      { label: 'Weekly data fetch', type: 'input', content: `SELECT title, text, type, project FROM captures
+ WHERE user_id = $uid
+   AND created_at >= monday AND created_at < next monday
 
-SELECT type, project, title, text
-  FROM captures
-  WHERE user_id = $uid
-  AND created_at BETWEEN weekStart AND weekEnd
-  ORDER BY created_at ASC` },
-      { label: 'System prompt', type: 'system', content: `You are a personal growth coach analyzing someone's weekly knowledge captures.
-Be specific, encouraging, and honest. Focus on patterns and momentum.` },
-      { label: 'User message', type: 'user', content: `My captures this week:
-{captures.map(c => \`[\${c.type}] \${c.title}: \${c.text}\`).join("\\n")}
-
-Return JSON:
-{
-  "highlights": "3–4 notable captures or insights",
-  "themes":     "2–3 main themes that emerged",
-  "insight":    "1 key observation about thinking patterns",
-  "momentum":   "high | medium | low"
+catalogue = "[type][project] title: first 80 chars"  per capture` },
+      { label: 'System prompt', type: 'system', content: `You are a personal knowledge analyst. Analyze this week's captures.
+Keep all strings short, in the language most captures are written in.
+- highlights: 3-4 most notable things captured
+- themes: 2-3 main themes
+- insight: one key observation about this week
+- momentum: based on quantity and variety of captures` },
+      { label: 'Schema (strict)', type: 'user', content: `{
+  highlights: string[],
+  themes:     string[],
+  insight:    string,
+  momentum:   { enum: ["high", "medium", "low"] }
 }` },
       { label: 'Model response', type: 'response', content: `{
-  "highlights": "Strong focus on distributed systems — 3 deep captures about consensus...",
-  "themes": "Technical depth, product thinking, decision frameworks",
-  "insight": "You\'re consistently connecting implementation details to user impact",
-  "momentum": "high"
+  "highlights": ["…"],
+  "themes": ["testiranje u Javi", "RAG"],
+  "insight": "…",
+  "momentum": "medium"
 }` },
-      { label: 'Upsert → display history', type: 'store', content: `const parsed = JSON.parse(response)
+      { label: 'Upsert → display history', type: 'store', content: `INSERT INTO summaries (user_id, week_start, content)
+ON CONFLICT (user_id, week_start) DO UPDATE
 
-// Insert or overwrite for this week
-INSERT INTO summaries (user_id, week_start, data)
-VALUES ($uid, $weekStart, $parsed)
-ON CONFLICT (user_id, week_start)
-DO UPDATE SET data = EXCLUDED.data
-
-GrowthTab reads:
-  • Latest summary displayed as top card
-  • Scrollable history of all past weeks
-  • momentum value → color indicator (green/amber/muted)` },
+Digest (lib/digest.ts): 60 captures, numbered 0..59 instead of UUIDs
+(~20 tokens per UUID saved), model returns indices → mapped back to ids.` },
     ],
   },
 };
@@ -756,7 +761,7 @@ function OverviewView({
           style={{ border: '1px dashed #60a5fa22' }}
         >
           <span className="text-[10px] text-muted/50 self-center font-mono mr-0.5">tabs:</span>
-          {(['capture_tab', 'chat_tab', 'search_tab', 'graph_tab', 'growth_tab', 'digest_tab'] as const).map(id => (
+          {(['capture_tab', 'chat_tab', 'search_tab', 'graph_tab', 'growth_tab', 'digest_tab', 'settings_tab'] as const).map(id => (
             <NodeBox key={id} id={id} label={id.replace('_tab', '')} layer="frontend" small />
           ))}
         </div>
@@ -766,11 +771,11 @@ function OverviewView({
 
       <LayerRow layer="api">
         {[
-          { id: 'api_capture',      label: '/api/capture',       sub: 'URL enrich → categorize' },
-          { id: 'api_chat',         label: '/api/chat',          sub: 'RAG → reply' },
-          { id: 'api_search',       label: '/api/search',        sub: 'Catalogue synthesis' },
-          { id: 'api_relate',       label: '/api/relate',        sub: 'Semantic link' },
-          { id: 'api_relate_batch', label: '/api/relate/batch',  sub: 'Bulk link' },
+          { id: 'api_capture',      label: '/api/capture',       sub: 'categorize → embed → kNN' },
+          { id: 'api_chat',         label: '/api/chat',          sub: 'vector → rerank → reply' },
+          { id: 'api_search',       label: '/api/search',        sub: 'vector → rerank → synthesis' },
+          { id: 'api_relate',       label: '/api/relate',        sub: 'cosine ≥ 0.71' },
+          { id: 'api_relate_batch', label: '/api/relate/batch',  sub: 'rebuild graph' },
           { id: 'api_transcribe',   label: '/api/transcribe',    sub: 'Audio → text' },
           { id: 'api_summary',      label: '/api/summary/weekly',sub: 'Weekly analysis' },
         ].map(n => (
@@ -781,8 +786,9 @@ function OverviewView({
       <Connector from="api" to="ai" />
 
       <LayerRow layer="ai">
-        <NodeBox id="claude" label="Claude Sonnet 4.6" sub="Categorize · Chat · Search · Relate · Summary" layer="ai" />
-        <NodeBox id="groq" label="Groq Whisper" sub="Audio transcription only" layer="ai" />
+        <NodeBox id="llm" label="Groq · gpt-oss" sub="Categorize · Chat · Search · Digest · Summary" layer="ai" />
+        <NodeBox id="voyage" label="Voyage AI" sub="Embeddings · Rerank" layer="ai" />
+        <NodeBox id="groq" label="Groq Whisper" sub="Audio transcription" layer="ai" />
       </LayerRow>
 
       <Connector from="ai" to="db" />
@@ -791,7 +797,7 @@ function OverviewView({
         <NodeBox
           id="supabase"
           label="Supabase · PostgreSQL"
-          sub="captures · projects · summaries · push_subscriptions · Google OAuth · RLS"
+          sub="captures + pgvector · projects · settings · query_log · digests · summaries · Google OAuth · RLS"
           layer="db"
         />
       </LayerRow>
@@ -990,9 +996,10 @@ const MAP_NODES: MapNode[] = [
   // Column 3 — Lib + External
   { id: 'mp_lc',     col: 3, row: 0, label: 'supabase/client', color: '#34d399', fileKey: 'client.ts'        },
   { id: 'mp_ls',     col: 3, row: 1, label: 'supabase/server', color: '#34d399', fileKey: 'server.ts'        },
-  { id: 'mp_claude', col: 3, row: 2, label: 'Claude Sonnet',   color: '#a78bfa'                              },
+  { id: 'mp_claude', col: 3, row: 2, label: 'Groq LLM',        color: '#a78bfa', fileKey: 'llm.ts'           },
   { id: 'mp_groq',   col: 3, row: 3, label: 'Groq Whisper',    color: '#a78bfa'                              },
   { id: 'mp_db',     col: 3, row: 4, label: 'Supabase DB',     color: '#34d399'                              },
+  { id: 'mp_voyage', col: 3, row: 5, label: 'Voyage AI',       color: '#a78bfa', fileKey: 'embeddings.ts'    },
 ];
 
 const MAP_EDGES: MapEdge[] = [
@@ -1016,7 +1023,10 @@ const MAP_EDGES: MapEdge[] = [
   { from: 'mp_ase',   to: 'mp_ls'    },
   { from: 'mp_ase',   to: 'mp_claude'},
   { from: 'mp_are',   to: 'mp_ls'    },
-  { from: 'mp_are',   to: 'mp_claude'},
+  { from: 'mp_are',   to: 'mp_voyage'},
+  { from: 'mp_acap',  to: 'mp_voyage'},
+  { from: 'mp_ach',   to: 'mp_voyage'},
+  { from: 'mp_ase',   to: 'mp_voyage'},
   { from: 'mp_atr',   to: 'mp_groq'  },
   { from: 'mp_asu',   to: 'mp_ls'    },
   { from: 'mp_asu',   to: 'mp_claude'},
@@ -1202,11 +1212,11 @@ function DependencyMapView() {
           ) : (
             <p className="text-xs text-slate-300 font-mono leading-relaxed">
               {selNode.id === 'mp_claude'
-                ? 'Claude Sonnet 4.6 via @anthropic-ai/sdk — used by all AI-powered API routes: categorize, chat, search, relate, summary.'
+                ? 'Groq gpt-oss via lib/llm.ts (provider-agnostic layer, strict structured outputs) — categorize, chat, search, digest, summary.'
                 : selNode.id === 'mp_groq'
                 ? 'Groq Whisper via groq-sdk — used by /api/transcribe for audio-to-text. Faster and cheaper than OpenAI Whisper.'
                 : selNode.id === 'mp_db'
-                ? 'Supabase PostgreSQL. Tables: captures, projects, summaries, push_subscriptions. Accessed exclusively via supabase/server.ts.'
+                ? 'Supabase PostgreSQL + pgvector. Tables: captures, projects, user_settings, query_log, digests, summaries, push_subscriptions. RLS on every table.'
                 : 'External service.'}
             </p>
           )}
@@ -1408,9 +1418,11 @@ function AIView({
           <span className="text-[10px] font-mono px-2 py-1 rounded border border-purple/30 text-purple bg-purple/10">
             {pipeline.model}
           </span>
-          <span className="text-[10px] font-mono px-2 py-1 rounded border border-amber/30 text-amber bg-amber/10">
-            max_tokens: {pipeline.maxTokens}
-          </span>
+          {pipeline.maxTokens !== null && (
+            <span className="text-[10px] font-mono px-2 py-1 rounded border border-amber/30 text-amber bg-amber/10">
+              max_tokens: {pipeline.maxTokens}
+            </span>
+          )}
           <span className="text-[10px] font-mono px-2 py-1 rounded border border-border text-muted bg-surface">
             {pipeline.route}
           </span>

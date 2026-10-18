@@ -8,15 +8,17 @@ A personal AI-powered knowledge capture and synthesis tool. Built for daily use 
 
 - **Next.js 15** App Router (server components + API routes)
 - **Supabase** — Postgres database + Google OAuth
-- **Anthropic API** — `claude-sonnet-4-6` for all AI features
-- **Groq** — `whisper-large-v3` for audio transcription
+- **Groq** (free tier) — `gpt-oss-120b` / `gpt-oss-20b` for all AI features via a provider-agnostic layer (`lib/llm.ts`) with strict structured outputs; `whisper-large-v3` for audio transcription
+- **Voyage AI** — `voyage-3.5-lite` embeddings + `rerank-2.5` reranker for RAG (pgvector); see [`eval/`](eval/) for the retrieval eval
 - **Tailwind CSS** — terminal aesthetic (JetBrains Mono, dark theme)
 - **Vercel** — hosting + cron jobs
 
 ## Features
 
 ### Capture
-- AI auto-categorizes every capture (type, project, title)
+- AI auto-categorizes every capture (type, project, title) with a strict JSON schema, so the model can only return valid types and existing projects
+- Project choice combines the LLM (which sees each project's description) with **kNN**: if ≥ 3 of the 5 most similar existing captures share a project, that project wins (measured in [`eval/`](eval/))
+- Every capture gets a Voyage embedding for semantic search, relations and kNN
 - URL detection — fetches og:title/description; YouTube URLs extract full transcript
 - Voice capture via Web Speech API (continuous, live)
 - Audio file upload — transcribed via Groq Whisper, merged with typed text
@@ -24,11 +26,13 @@ A personal AI-powered knowledge capture and synthesis tool. Built for daily use 
 - Tasks support due dates and priority (high / medium / low)
 - Star (favorite) captures, edit, delete
 
-### Search & Discovery
+### Search & Discovery (RAG)
+- **Search tab** — the query is embedded, pgvector returns the 20 most similar captures, a Voyage reranker keeps the best 12, and the LLM synthesizes an answer with follow-up questions
+- **Chat tab** — same retrieval (15 candidates → rerank → 8) for every message; a pinned capture can be discussed directly
+- **Relations** — captures are linked when cosine similarity ≥ 0.71 (threshold picked by F1 on 491 labelled pairs), batch rebuild from the Graph tab
 - **⌘K** instant search overlay — client-side, multi-word AND matching
-- **Search tab** — AI synthesis across all captures, follow-up questions
-- **Chat tab** — conversational AI with RAG (finds top 8 relevant captures per message, ~$0.01/message)
 - **Knowledge Graph** — force-directed canvas graph, pan/zoom, filter by type/project
+- Every search/chat query is logged with what was retrieved and whether a fallback kicked in (`query_log`)
 
 ### Growth
 - **Activity heatmap** — year view (52 weeks) and month view with navigation
@@ -38,9 +42,14 @@ A personal AI-powered knowledge capture and synthesis tool. Built for daily use 
 - **Weekly summary** — AI analysis of the current week, stored in Supabase, browsable history
 
 ### Digest
-- AI analysis of last 80 captures: themes, patterns, pending tasks, forgotten ideas, next action
+- AI analysis of the last 60 captures: themes, patterns, pending tasks, forgotten ideas, next action
+- Generated on demand, or weekly by cron on the day chosen in settings (skipped if nothing new was captured)
 - Stored in Supabase — synced across all devices
-- Full history, always shows last generated until you regenerate
+
+### Settings
+- Weekly digest on/off + day, review reminders (morning / afternoon / both / off), task reminders
+- Default type and project for captures when AI is unavailable
+- Export (Markdown / JSON) and delete all captures (typed confirmation)
 
 ### Architecture
 - Visual system explorer — visible in header on desktop and mobile landscape
@@ -48,7 +57,7 @@ A personal AI-powered knowledge capture and synthesis tool. Built for daily use 
 - **Data Flows** — step-by-step animated breakdown of Save Capture, Chat, Search, and Batch Relate flows
 - **Dependency Map** — structured 4-column node graph showing how files connect; click to highlight connections
 - **File Tree** — browsable file tree with exports, imports, and used-by for each file
-- **AI Pipeline** — full prompt/response breakdown for every Claude and Groq operation
+- **AI Pipeline** — full prompt/response breakdown for every LLM operation
 
 ### PWA
 - Installable on iOS and Android (Add to Home Screen)
@@ -57,10 +66,23 @@ A personal AI-powered knowledge capture and synthesis tool. Built for daily use 
 
 ## Cron
 
-Defined in `vercel.json` — runs daily at 08:00 UTC:
-- Sends review reminder if captures are due
-- Sends weekly recap every Monday
+Defined in `vercel.json`:
+- **09:00 and 14:00 UTC** `/api/cron/review-reminder` — review reminders for users who chose that run; weekly digest in the morning run of each user's chosen day
+- **10:00 UTC** `/api/cron/task-due` — push for tasks due tomorrow; embeds captures that were saved while Voyage was unavailable (self-healing)
 
+## Retrieval & evals
+
+Measured on a golden dataset of 26 questions over the real knowledge base ([`eval/README.md`](eval/README.md)):
+
+| retrieval | hit@1 | hit@3 |
+|---|---|---|
+| old keyword matching | 17% | 39% |
+| BM25 | 35% | 52% |
+| vector (voyage-3.5-lite + pgvector) | 83% | 96% |
+| hybrid BM25 + vector (RRF) | 61% | 78% — rejected |
+| **vector + reranker** (in production) | **100%** | **100%** |
+
+Capture categorization is evaluated against the stored labels: project accuracy LLM 63%, kNN 75%, production rule 73%.
 
 ## Database Schema
 
@@ -74,6 +96,7 @@ create table captures (
   type text not null default 'Note',
   project text not null default 'Other',
   related_ids uuid[] default '{}',
+  embedding vector(1024),            -- Voyage embedding (pgvector, HNSW index)
   starred boolean not null default false,
   last_reviewed_at timestamptz,
   due_date date,
@@ -81,7 +104,17 @@ create table captures (
   created_at timestamptz default now()
 );
 
--- Daily digest history
+-- Projects (description is fed to the categorization prompt)
+create table projects (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users not null,
+  name text not null,
+  color text not null,
+  description text,
+  created_at timestamptz default now()
+);
+
+-- Digest history
 create table digests (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users not null,
@@ -108,6 +141,10 @@ create table push_subscriptions (
 );
 ```
 
+Also: `user_settings`, `query_log` and the `match_captures()` similarity function — see
+[`supabase/`](supabase/) for the full setup scripts (`pgvector-setup.sql`, `settings-and-query-log.sql`,
+`project-descriptions.sql`).
+
 All tables use Row Level Security — users only access their own data.
 
 ## Environment Variables
@@ -115,7 +152,8 @@ All tables use Row Level Security — users only access their own data.
 ```env
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
-ANTHROPIC_API_KEY=
+GROQ_API_KEY=
+VOYAGE_API_KEY=
 NEXT_PUBLIC_VAPID_PUBLIC_KEY=
 VAPID_PRIVATE_KEY=
 VAPID_EMAIL=
@@ -127,32 +165,35 @@ CRON_SECRET=
 
 | Route | Method | Description |
 |---|---|---|
-| `/api/capture` | POST | Save capture, AI categorize, trigger relate |
-| `/api/capture/[id]` | PATCH / DELETE | Edit fields, delete |
-| `/api/relate` | POST | Find semantic connections for one capture |
-| `/api/relate/batch` | POST | Batch relate selected captures (Graph tab) |
-| `/api/search` | POST | AI search synthesis across all captures |
-| `/api/chat` | POST | RAG chat (keyword-ranked context + history) |
+| `/api/capture` | POST | Save capture: AI categorize + kNN project, embed, trigger relate |
+| `/api/capture/[id]` | PUT / PATCH / DELETE | Edit fields (re-embeds on text change), delete |
+| `/api/relate` | POST | Link one capture to similar ones (vector similarity) |
+| `/api/relate/batch` | POST | Rebuild all relations (Graph tab) |
+| `/api/search` | POST | RAG search: vector → rerank → LLM synthesis |
+| `/api/chat` | POST | RAG chat: vector → rerank → LLM answer |
 | `/api/transcribe` | POST | Audio file → Groq Whisper → transcript |
 | `/api/projects` | GET / POST | List projects / create new project |
 | `/api/digest` | GET / POST | Fetch history / generate digest |
 | `/api/summary/weekly` | GET / POST | Fetch weekly summaries / generate |
+| `/api/settings` | GET / PUT | Read / update user settings |
+| `/api/account/data` | DELETE | Delete all captures, digests, summaries and query log |
 | `/api/push/subscribe` | POST | Save push subscription (VAPID) |
-| `/api/cron/review-reminder` | GET | Daily cron: push for spaced repetition reviews |
-| `/api/cron/task-due` | GET | Daily cron: push for tasks due today |
+| `/api/cron/review-reminder` | GET | Cron: review reminders + weekly digest |
+| `/api/cron/task-due` | GET | Cron: task reminders + fill missing embeddings |
 | `/api/auth/callback` | GET | Google OAuth callback |
 
+## LLM budget (Groq free tier)
 
-## Token Usage (approximate)
+All AI calls go through `lib/llm.ts`. Groq's free tier allows 8K tokens/minute and 200K tokens/day per model, so prompts are kept compact:
 
-| Feature | Input tokens | Cost |
+| Feature | Model | ~Tokens per call |
 |---|---|---|
-| Capture (categorize) | ~200 | ~$0.001 |
-| Relate (per capture) | ~3,000 | ~$0.01 |
-| Search synthesis | ~15,000 | ~$0.05 |
-| Chat message (RAG) | ~2,000 | ~$0.009 |
-| Daily digest | ~8,000 | ~$0.03 |
-| Weekly summary | ~3,000 | ~$0.01 |
+| Capture (categorize) | gpt-oss-20b | 0.3–1.5K |
+| Search synthesis | gpt-oss-120b | 5–6K (12 captures × 1,000 chars) |
+| Chat message | gpt-oss-120b | 2–3K |
+| Digest | gpt-oss-120b | ~5K (60 captures, numbered instead of UUIDs) |
+| Weekly summary | gpt-oss-120b | 1–3K |
+
 ## Local Development
 
 ```bash

@@ -90,3 +90,48 @@ Vector search returns 15 candidates, and Voyage `rerank-2.5` re-orders them (tit
   from using the app, follow-ups, and details buried deep in long notes.
 - `aggregate` questions stay at 0% for every method, as expected. They need a query router,
   not better ranking.
+
+## Categorization eval
+
+[`categorize-eval.mts`](categorize-eval.mts) runs every capture through `categorizeCapture`
+(the exact code `/api/capture` uses) and compares type and project with the stored labels.
+
+```bash
+npx tsx --env-file=.env.local eval/categorize-eval.mts [--no-descriptions] [--few-shot] [--limit N]
+```
+
+Stored labels are the reference. Most were originally picked by Claude Sonnet, and on
+2026-10-16 the projects were re-labelled by hand against written definitions
+([`project-descriptions.json`](project-descriptions.json)).
+
+### 2026-10-16: project taxonomy, LLM vs kNN
+
+First run, old labels (`gpt-oss-20b`, project names only): type 80%, **project 46%**. Only 31
+of 120 captures had the stored label, the LLM and kNN all agreeing. The labels themselves were
+inconsistent: technical notes were split between "Personal" and "Other" with no rule.
+
+Fix: write a one-sentence definition per project, split "Other" into **Software Engineering**
+and **AI Engineering** (fintech stays in Other), merge "Frontend", and re-label 51 captures.
+
+| method (new labels) | project |
+|---|---|
+| LLM (`gpt-oss-20b`) with project descriptions | 63% |
+| kNN: 5 most similar captures vote (leave-one-out) | **75%** |
+| kNN when ≥ 3 of 5 agree, else LLM | 73% |
+
+- With the same embeddings and algorithm, kNN went from 63% to 75% after re-labelling.
+  Consistent categories are easier to learn. Part of the jump is also because the new labels
+  are topic-based, which is how kNN decides.
+- The LLM still files course notes (FON) as Software Engineering: a note about Maven for a
+  course reads like any Maven note. kNN picks up the habit from neighbours.
+- **Decision: kNN when ≥ 3 of 5 agree, else LLM.** It's 2 captures behind plain kNN, which
+  is within noise. kNN alone can never pick a project that has no captures yet (cold start),
+  so the LLM covers that case.
+- Not yet measured: few-shot (LLM gets the 5 nearest captures and their projects).
+- Caveat: the LLM "names only" prompt hasn't been re-run on the new labels, so 46% → 63%
+  mixes the prompt change with the label change.
+- **Follow-up (same day):** the eval showed the LLM filing course notes (Maven for a course) as
+  Software Engineering, and on reflection that is what the user actually wanted. The rule
+  changed to "by topic": FON keeps only faculty logistics (study plans, courses, exams, thesis),
+  and technical knowledge from courses goes by topic. 20 more captures were moved, so the
+  numbers above are for the previous labels and need a re-run.
