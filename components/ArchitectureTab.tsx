@@ -158,8 +158,8 @@ const NODES: Record<string, NodeDetail> = {
   },
   api_capture: {
     title: '/api/capture',
-    file: 'app/api/capture/route.ts',
-    description: 'Creates a new capture: enriches URLs, categorizes with an LLM, embeds with Voyage, and lets similar past captures vote on the project.',
+    file: 'lib/createCapture.ts',
+    description: 'Creates a new capture (shared pipeline behind /api/capture and /api/ingest): enriches URLs, categorizes with an LLM, embeds with Voyage, and lets similar past captures vote on the project.',
     tech: ['gpt-oss-20b (Groq)', 'Voyage voyage-3.5-lite', 'kNN project vote', 'youtube-transcript pkg'],
     details: [
       'YouTube URL → full transcript; web URL → og:title + og:description',
@@ -167,6 +167,7 @@ const NODES: Record<string, NodeDetail> = {
       'Embedding of title + text (best-effort: if Voyage is down the capture is still saved)',
       'kNN: if ≥ 3 of the 5 most similar captures share a project, it overrides the LLM (eval: kNN 75% vs LLM 63%)',
       'Falls back to the default type / project from settings when the LLM is unavailable',
+      '/api/ingest: same pipeline with a bearer token instead of a session cookie (iOS Shortcuts, scripts); service-role client, every query filtered by INGEST_USER_ID',
     ],
   },
   api_chat: {
@@ -373,7 +374,8 @@ const FILE_TREE: FileNode[] = [
     name: 'app', type: 'dir', children: [
       {
         name: 'api', type: 'dir', children: [
-          { name: 'capture/route.ts', type: 'file', detail: { description: 'Enrich URL → LLM categorize → embed → kNN project vote → DB insert', exports: ['POST'], imports: ['lib/categorize', 'lib/embeddings', 'lib/settings', 'youtube-transcript'], usedBy: ['CaptureTab'] } },
+          { name: 'capture/route.ts', type: 'file', detail: { description: 'Session-cookie auth → lib/createCapture (enrich → categorize → embed → kNN vote → insert)', exports: ['POST'], imports: ['lib/createCapture'], usedBy: ['CaptureTab', 'share page'] } },
+          { name: 'ingest/route.ts', type: 'file', detail: { description: 'Bearer-token auth (constant-time compare) → lib/createCapture for one owner; returns id/title/type/project', exports: ['POST'], imports: ['lib/createCapture', 'lib/supabase/server'], usedBy: ['iOS Shortcuts', 'scripts'] } },
           { name: 'capture/[id]/route.ts', type: 'file', detail: { description: 'Update (re-embeds when text changes) or delete a capture', exports: ['PUT', 'PATCH', 'DELETE'], imports: ['lib/embeddings', 'lib/captures'], usedBy: ['CaptureTab', 'ChatTab', 'GrowthTab', 'CaptureDetailModal'] } },
           { name: 'chat/route.ts', type: 'file', detail: { description: 'RAG chat: embed → pgvector → rerank → LLM answer; logs the query', exports: ['POST'], imports: ['lib/embeddings', 'lib/llm', 'lib/queryLog'], usedBy: ['ChatTab'] } },
           { name: 'search/route.ts', type: 'file', detail: { description: 'RAG search: embed → pgvector → rerank → structured LLM synthesis; logs the query', exports: ['POST'], imports: ['lib/embeddings', 'lib/llm', 'lib/queryLog'], usedBy: ['SearchTab'] } },
@@ -417,9 +419,10 @@ const FILE_TREE: FileNode[] = [
     name: 'lib', type: 'dir', children: [
       { name: 'llm.ts', type: 'file', detail: { description: 'Provider-agnostic LLM layer: generateText / generateObject (strict JSON schema). Currently Groq gpt-oss.', exports: ['generateText', 'generateObject', 'isRateLimited', 'MODELS'], imports: ['groq-sdk'], usedBy: ['chat, search, summary, digest routes', 'lib/categorize', 'lib/digest'] } },
       { name: 'embeddings.ts', type: 'file', detail: { description: 'Voyage embeddings + reranker, relate threshold, self-healing fill of missing embeddings', exports: ['embed', 'embedOne', 'rerank', 'fillMissingEmbeddings', 'RELATE_THRESHOLD'], imports: [], usedBy: ['capture, chat, search, relate routes', 'cron/task-due'] } },
-      { name: 'categorize.ts', type: 'file', detail: { description: 'LLM categorization with project descriptions + kNN project vote; shared with the eval', exports: ['categorizeCapture', 'projectFromNeighbors'], imports: ['lib/llm'], usedBy: ['/api/capture', 'eval/categorize-eval.mts'] } },
+      { name: 'categorize.ts', type: 'file', detail: { description: 'LLM categorization with project descriptions + kNN project vote; shared with the eval', exports: ['categorizeCapture', 'projectFromNeighbors'], imports: ['lib/llm'], usedBy: ['lib/createCapture', 'eval/categorize-eval.mts'] } },
+      { name: 'createCapture.ts', type: 'file', detail: { description: 'Capture pipeline shared by /api/capture and /api/ingest: URL/YouTube enrichment, categorize, embed, kNN project vote, insert', exports: ['createCapture', 'isUrl'], imports: ['lib/categorize', 'lib/embeddings', 'lib/settings', 'lib/captures', 'youtube-transcript'], usedBy: ['/api/capture', '/api/ingest'] } },
       { name: 'digest.ts', type: 'file', detail: { description: 'Digest generation (numbered captures instead of UUIDs to save tokens); shared by button and cron', exports: ['createDigest'], imports: ['lib/llm'], usedBy: ['/api/digest', 'cron/review-reminder'] } },
-      { name: 'settings.ts', type: 'file', detail: { description: 'Settings types, defaults, validation, getSettings', exports: ['getSettings', 'parseSettings', 'DEFAULT_SETTINGS'], imports: [], usedBy: ['/api/settings', 'cron jobs', '/api/capture', 'SettingsTab'] } },
+      { name: 'settings.ts', type: 'file', detail: { description: 'Settings types, defaults, validation, getSettings', exports: ['getSettings', 'parseSettings', 'DEFAULT_SETTINGS'], imports: [], usedBy: ['/api/settings', 'cron jobs', 'lib/createCapture', 'SettingsTab'] } },
       { name: 'queryLog.ts', type: 'file', detail: { description: 'Log search/chat questions, retrieved ids and fallback stage (never throws)', exports: ['logQuery'], imports: [], usedBy: ['/api/search', '/api/chat'] } },
       { name: 'captures.ts', type: 'file', detail: { description: 'CAPTURE_COLUMNS — everything except the embedding vector', exports: ['CAPTURE_COLUMNS'], imports: [], usedBy: ['brain/page', 'BrainClient', 'capture routes'] } },
       { name: 'export.ts', type: 'file', detail: { description: 'Download captures as Markdown or JSON', exports: ['exportJSON', 'exportMarkdown'], imports: [], usedBy: ['CaptureTab', 'SettingsTab'] } },

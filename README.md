@@ -23,6 +23,7 @@ A personal AI-powered knowledge capture and synthesis tool. Built for daily use 
 - Voice capture via Web Speech API (continuous, live)
 - Audio file upload — transcribed via Groq Whisper, merged with typed text
 - Quick templates: task / idea / TIL / link / note
+- **iOS Shortcuts / scripts** — `POST /api/ingest` with a bearer token saves through the same pipeline without a browser session (setup below)
 - Tasks support due dates and priority (high / medium / low)
 - Star (favorite) captures, edit, delete
 
@@ -158,6 +159,8 @@ NEXT_PUBLIC_VAPID_PUBLIC_KEY=
 VAPID_PRIVATE_KEY=
 VAPID_EMAIL=
 CRON_SECRET=
+INGEST_TOKEN=     # min 32 chars, e.g. `openssl rand -hex 32`; leave empty to disable /api/ingest
+INGEST_USER_ID=   # Supabase auth user id that /api/ingest captures belong to
 # + server-side Supabase and other keys in Vercel dashboard
 ```
 
@@ -166,6 +169,7 @@ CRON_SECRET=
 | Route | Method | Description |
 |---|---|---|
 | `/api/capture` | POST | Save capture: AI categorize + kNN project, embed, trigger relate |
+| `/api/ingest` | POST | Same as `/api/capture`, authenticated with `Authorization: Bearer $INGEST_TOKEN` instead of a session (iOS Shortcuts) |
 | `/api/capture/[id]` | PUT / PATCH / DELETE | Edit fields (re-embeds on text change), delete |
 | `/api/relate` | POST | Link one capture to similar ones (vector similarity) |
 | `/api/relate/batch` | POST | Rebuild all relations (Graph tab) |
@@ -181,6 +185,28 @@ CRON_SECRET=
 | `/api/cron/review-reminder` | GET | Cron: review reminders + weekly digest |
 | `/api/cron/task-due` | GET | Cron: task reminders + fill missing embeddings |
 | `/api/auth/callback` | GET | Google OAuth callback |
+
+## iOS Shortcut (quick capture)
+
+`/api/ingest` lets a Shortcut save a capture without opening the app. Setup:
+
+1. Generate a token (`openssl rand -hex 32`), set `INGEST_TOKEN` and `INGEST_USER_ID` (Supabase → Authentication → Users → your user's UID) in Vercel, redeploy. `SUPABASE_SERVICE_ROLE_KEY` must also be set.
+2. In Shortcuts: **Dictate Text** (or **Ask for Input**) → **Get Contents of URL**
+   - URL: `https://<your-domain>/api/ingest`, Method: POST
+   - Headers: `Authorization` = `Bearer <token>`
+   - Request Body: JSON, key `text` = the dictated text
+3. **Get Dictionary Value** `title` → **Show Notification** to confirm what was saved.
+4. Bind it to the Action Button or Back Tap.
+
+Test from a terminal:
+
+```bash
+curl -X POST https://<your-domain>/api/ingest \
+  -H "Authorization: Bearer $INGEST_TOKEN" -H "Content-Type: application/json" \
+  -d '{"text":"test capture from curl"}'
+```
+
+The token is stored in the Shortcut in plain text: treat the phone as the key, and rotate the token in Vercel if the Shortcut is ever shared.
 
 ## LLM budget (Groq free tier)
 
