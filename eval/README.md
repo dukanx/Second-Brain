@@ -135,3 +135,51 @@ and **AI Engineering** (fintech stays in Other), merge "Frontend", and re-label 
   changed to "by topic": FON keeps only faculty logistics (study plans, courses, exams, thesis),
   and technical knowledge from courses goes by topic. 20 more captures were moved, so the
   numbers above are for the previous labels and need a re-run.
+
+### 2026-10-20: few-shot, on the "by topic" labels
+
+The prompt also gets the 5 most similar captures and the projects they are filed under
+(leave-one-out). All 120 captures, current labels:
+
+| method | project |
+|---|---|
+| few-shot LLM alone | 78% |
+| kNN alone | 82% |
+| **kNN when ≥ 3 of 5 agree, else few-shot LLM** | **85%** |
+
+- This time the combination beats both methods. kNN decides 98 captures (90% correct), and the
+  LLM decides the 22 where neighbours disagree (64% correct). Those 22 are the hard cases by
+  construction.
+- The LLM alone gets Village Booker right only 2 of 6 times ("Spring Boot + Neon" reads as
+  Software Engineering). kNN catches these.
+- Type accuracy is 80%. The most common miss is Note → Learning (12): the line between the two
+  types is fuzzy.
+- Production currently falls back to the LLM *without* few-shot. That variant still needs a
+  run on the new labels before deciding to switch.
+- **Strict mode is not a hard guarantee on Groq.** In the first attempt, the capture listing six
+  links came back as an array of six objects. Groq rejected it with `json_validate_failed`
+  instead of returning it. `generateObject` now retries once with an explicit reminder, and the
+  eval counts any remaining failure as a miss instead of stopping.
+
+### 2026-10-21: plain LLM on the same labels, and the few-shot decision
+
+| method (current labels, 120 captures) | without few-shot | with few-shot |
+|---|---|---|
+| LLM alone | 77% | 78% |
+| production rule (kNN ≥ 3/5, else LLM) | 84% | 85% |
+
+- The gap is 1 capture out of 120, and the plain run lost one capture to a Groq error that is
+  now handled (see below). **Decision: few-shot does not go to production.** In production it
+  would need a second LLM call for the ~18% of captures where the neighbours disagree. That is
+  more code and more tokens for a difference within noise. The `--few-shot` flag stays in the
+  eval for future measurements.
+- Why it doesn't help: kNN already uses the same information (how neighbours are filed) for the
+  82% of captures where they agree. What's left are cases where the neighbours themselves
+  disagree.
+- Project accuracy went from 46% (first run, old labels, names only) to 84% (production rule),
+  mostly from fixing the labels and adding kNN, not from a better prompt.
+- **Second Groq failure mode:** `tool_use_failed`. gpt-oss sometimes tries to call a built-in
+  tool (it was trained with browsing/python) even when no tools are given, and Groq rejects the
+  request. `lib/llm.ts` now retries both known failures (`json_validate_failed`,
+  `tool_use_failed`) once with a matching reminder, for every LLM call (not just structured
+  output).

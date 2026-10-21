@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="sr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Second Brain beležnica</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;600;700&display=swap">
+<style>
+/* Layout: a technical notebook — fixed chapter index on the left, one reading column,
+   diagrams and tables allowed to run wider. Colors reuse the app's four layer hues. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --fg: #1b2230;
+  --muted: #5b6577;
+  --line: #d9dee7;
+  --accent: #b86e00;          /* amber, darkened for light ground */
+  --frontend: #2f6fd1;
+  --api: #b86e00;
+  --ai: #7a52d6;
+  --db: #12875f;
+  --good: #12875f;
+  --bad: #c2412d;
+  --code-bg: #eef1f5;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1117; --surface: #131a24; --fg: #dde3ec; --muted: #8b96a8; --line: #253041;
+    --accent: #f59e0b; --frontend: #60a5fa; --api: #f59e0b; --ai: #a78bfa; --db: #34d399;
+    --good: #34d399; --bad: #f87171; --code-bg: #1a2230; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --surface: #131a24; --fg: #dde3ec; --muted: #8b96a8; --line: #253041;
+  --accent: #f59e0b; --frontend: #60a5fa; --api: #f59e0b; --ai: #a78bfa; --db: #34d399;
+  --good: #34d399; --bad: #f87171; --code-bg: #1a2230; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.65 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.shell { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 48px; max-width: 1180px; margin: 0 auto; padding-block: 40px 80px; }
+@media (max-width: 900px) { .shell { grid-template-columns: minmax(0, 1fr); gap: 24px; padding-block: 24px 64px; } }
+
+/* chapter index */
+nav.toc { position: sticky; top: 24px; align-self: start; max-height: calc(100vh - 48px); overflow-y: auto; font-size: 13.5px; }
+nav.toc .brand { font: 700 15px/1.3 var(--font-mono); color: var(--accent); margin-bottom: 4px; }
+nav.toc .sub { color: var(--muted); font-size: 12.5px; margin-bottom: 18px; }
+nav.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; counter-reset: ch; }
+nav.toc li { counter-increment: ch; }
+nav.toc a { display: grid; grid-template-columns: 26px 1fr; color: var(--muted); text-decoration: none; padding: 4px 6px; border-radius: 4px; }
+nav.toc a::before { content: counter(ch, decimal-leading-zero); font: 600 11px/1.9 var(--font-mono); color: var(--line); }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); background: var(--surface); outline: none; }
+nav.toc .soon a { font-style: italic; }
+@media (max-width: 900px) {
+  nav.toc { position: static; max-height: none; border-bottom: 1px solid var(--line); padding-bottom: 16px; }
+  nav.toc ol { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+}
+
+main { min-width: 0; }
+header.intro { margin-bottom: 40px; }
+header.intro .eyebrow { font: 600 12px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+h1 { font: 700 clamp(28px, 4vw, 40px)/1.15 var(--font-mono); letter-spacing: -.02em; margin: 10px 0 14px; text-wrap: balance; }
+h2 { font: 700 23px/1.25 var(--font-mono); letter-spacing: -.01em; margin: 0 0 6px; text-wrap: balance; }
+h3 { font: 600 17px/1.35 var(--font-body); margin: 28px 0 8px; }
+p, li { max-width: 68ch; }
+p { margin: 0 0 14px; }
+.lede { font-size: 18px; color: var(--muted); max-width: 62ch; }
+a { color: var(--accent); }
+code, kbd { font: 0.88em var(--font-mono); background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+pre { font: 13px/1.6 var(--font-mono); background: var(--code-bg); padding: 14px 16px; border-radius: 6px; overflow-x: auto; margin: 0 0 16px; }
+pre code { background: none; padding: 0; }
+strong { font-weight: 600; }
+
+section.chapter { padding-block: 36px; border-top: 1px solid var(--line); scroll-margin-top: 16px; }
+section.chapter > .kicker { font: 600 12px/1 var(--font-mono); color: var(--muted); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.updated { font: 500 11px/1 var(--font-mono); color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 4px 8px; }
+
+/* layer chips: same four hues as the app's architecture page */
+.chip { display: inline-block; font: 600 11px/1 var(--font-mono); letter-spacing: .04em; padding: 4px 7px; border-radius: 3px; border: 1px solid currentColor; white-space: nowrap; }
+.chip.fe { color: var(--frontend); } .chip.api { color: var(--api); } .chip.ai { color: var(--ai); } .chip.db { color: var(--db); }
+
+/* tables */
+.table-wrap { overflow-x: auto; margin: 0 0 18px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 600 12px/1.4 var(--font-mono); color: var(--muted); letter-spacing: .03em; text-transform: uppercase; background: var(--bg); }
+tr:last-child td { border-bottom: none; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: 13.5px; }
+tr.win td { font-weight: 600; }
+tr.win td:first-child { box-shadow: inset 3px 0 0 var(--good); }
+tr.lose td { color: var(--muted); }
+
+/* callouts: one style for "why", one for "lesson" */
+.note { border-left: 3px solid var(--accent); background: var(--surface); padding: 12px 16px; margin: 0 0 18px; border-radius: 0 6px 6px 0; max-width: 72ch; }
+.note .label { font: 700 11px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 6px; }
+.note p:last-child { margin-bottom: 0; }
+
+/* figures */
+figure { margin: 8px 0 24px; }
+.fig { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; overflow-x: auto; }
+.fig svg { display: block; width: 100%; height: auto; min-width: 560px; color: var(--fg); }
+figcaption { font-size: 13.5px; color: var(--muted); margin-top: 8px; max-width: 72ch; }
+svg text { font-family: var(--font-mono); font-size: 12px; fill: currentColor; }
+svg .small { font-size: 10.5px; fill: var(--muted); }
+svg .box { fill: var(--surface); stroke: currentColor; stroke-width: 1.2; }
+svg .box.fe { stroke: var(--frontend); } svg .box.api { stroke: var(--api); } svg .box.ai { stroke: var(--ai); } svg .box.db { stroke: var(--db); }
+svg .t-fe { fill: var(--frontend); } svg .t-api { fill: var(--api); } svg .t-ai { fill: var(--ai); } svg .t-db { fill: var(--db); }
+svg .edge { stroke: var(--muted); stroke-width: 1.3; fill: none; }
+svg .edge.dash { stroke-dasharray: 5 4; }
+svg .head { fill: var(--muted); }
+svg .bar { fill: var(--code-bg); stroke: var(--line); }
+svg .bar.hot { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+
+/* steps: a real sequence, so numbers carry meaning */
+ol.steps { list-style: none; padding: 0; margin: 0 0 20px; counter-reset: st; display: grid; gap: 0; }
+ol.steps > li { counter-increment: st; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; padding: 10px 0; border-bottom: 1px dashed var(--line); max-width: none; }
+ol.steps > li::before { content: counter(st); font: 700 13px/26px var(--font-mono); text-align: center; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); color: var(--muted); }
+ol.steps .what { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+ol.steps .why { color: var(--muted); font-size: 14.5px; margin-top: 2px; }
+
+/* threshold explorer */
+.explorer { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin: 0 0 20px; display: grid; gap: 14px; }
+.explorer label { font: 600 13px var(--font-mono); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.explorer input[type=range] { flex: 1 1 220px; accent-color: var(--accent); }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.stat { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
+.stat .k { font: 600 11px/1 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.stat .v { font: 700 24px/1.3 var(--font-mono); font-variant-numeric: tabular-nums; }
+.meter { height: 6px; background: var(--code-bg); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+.meter i { display: block; height: 100%; background: var(--accent); }
+.explorer .verdict { font-size: 14.5px; color: var(--muted); margin: 0; }
+@media (max-width: 480px) { .stats { grid-template-columns: minmax(0, 1fr); } }
+
+/* self-test */
+details { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); margin: 0 0 8px; }
+details summary { cursor: pointer; padding: 10px 14px; font-weight: 500; list-style: none; display: grid; grid-template-columns: 18px 1fr; gap: 8px; }
+details summary::before { content: "+"; font: 700 14px/1.6 var(--font-mono); color: var(--accent); }
+details[open] summary::before { content: "−"; }
+details summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+details .a { padding: 0 14px 12px 40px; color: var(--muted); }
+details .a p { margin-bottom: 8px; }
+
+dl.glossary { display: grid; grid-template-columns: minmax(140px, 200px) minmax(0, 1fr); gap: 8px 20px; margin: 0; }
+dl.glossary dt { font: 600 13.5px/1.6 var(--font-mono); }
+dl.glossary dd { margin: 0; color: var(--muted); max-width: 64ch; }
+@media (max-width: 560px) { dl.glossary { grid-template-columns: minmax(0, 1fr); } dl.glossary dd { margin-bottom: 8px; } }
+
+.roadmap { display: grid; gap: 10px; }
+.roadmap .item { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 12px; padding: 10px 0; border-bottom: 1px dashed var(--line); }
+.status { font: 700 11px/1.9 var(--font-mono); letter-spacing: .05em; text-transform: uppercase; }
+.status.next { color: var(--accent); } .status.later { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="shell">
+
+<nav class="toc" aria-label="Poglavlja">
+  <div class="brand">second_brain</div>
+  <div class="sub">beležnica za učenje · RAG, eval, LLM</div>
+  <ol>
+    <li><a href="#sistem">Sistem u jednoj slici</a></li>
+    <li><a href="#capture">Put jednog captura</a></li>
+    <li><a href="#pitanje">Put jednog pitanja (RAG)</a></li>
+    <li><a href="#embeddinzi">Embeddinzi i pgvector</a></li>
+    <li><a href="#reranker">Reranker</a></li>
+    <li><a href="#keyword">Keyword, BM25, hybrid</a></li>
+    <li><a href="#eval">Evaluacija</a></li>
+    <li><a href="#prag">Prag za veze (relate)</a></li>
+    <li><a href="#structured">Structured outputs</a></li>
+    <li><a href="#llm">LLM sloj i provider</a></li>
+    <li><a href="#kategorizacija">Kategorizacija</a></li>
+    <li><a href="#operativa">Rad u produkciji</a></li>
+    <li><a href="#odluke">Odluke i alternative</a></li>
+    <li><a href="#provera">Pitanja za proveru</a></li>
+    <li><a href="#recnik">Rečnik</a></li>
+    <li class="soon"><a href="#dalje">Šta sledi (agent…)</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="intro">
+  <div class="eyebrow">Beležnica · ažurirano 21. 10. 2026.</div>
+  <h1>Kako Second Brain radi, i zašto baš tako</h1>
+  <p class="lede">Za svaki deo sistema: šta radi, zašto je napravljen tako, koje su bile alternative i kako znamo da radi. Dopunjava se posle svakog novog koraka (sledeći: agent).</p>
+  <p>Boje slojeva su iste kao na <code>/arch</code> stranici aplikacije:
+    <span class="chip fe">FRONTEND</span> <span class="chip api">API</span> <span class="chip ai">AI SERVISI</span> <span class="chip db">BAZA</span></p>
+</header>
+
+<!-- ───────────────────────────── 01 ───────────────────────────── -->
+<section class="chapter" id="sistem">
+  <div class="kicker">Poglavlje 01</div>
+  <h2>Sistem u jednoj slici</h2>
+  <p>Browser nikad ne priča direktno sa AI servisima. Sve ide kroz Next.js API rute na Vercelu, koje drže ključeve, proveravaju ko je ulogovan i odlučuju koji servis se zove. Baza je jedno mesto za sve: tekst, vektori, podešavanja i log upita.</p>
+  <figure>
+    <div class="fig">
+      <svg viewBox="0 0 740 300" role="img" aria-label="Browser šalje zahteve API rutama; API rute zovu Groq za tekst, Voyage za vektore i rerank, i Supabase za podatke i vektorsku pretragu; Vercel cron okida API rute po rasporedu.">
+        <defs>
+          <marker id="ar1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head"/></marker>
+        </defs>
+        <rect class="box fe" x="20" y="118" width="150" height="64" rx="6"/>
+        <text x="95" y="146" text-anchor="middle" class="t-fe">Browser / PWA</text>
+        <text x="95" y="164" text-anchor="middle" class="small">tabovi, ⌘K, push</text>
+
+        <rect class="box api" x="250" y="104" width="190" height="92" rx="6"/>
+        <text x="345" y="134" text-anchor="middle" class="t-api">Next.js API rute</text>
+        <text x="345" y="152" text-anchor="middle" class="small">auth · ključevi · fallback</text>
+        <text x="345" y="168" text-anchor="middle" class="small">lib/llm · lib/embeddings</text>
+
+        <rect class="box ai" x="530" y="22" width="190" height="60" rx="6"/>
+        <text x="625" y="48" text-anchor="middle" class="t-ai">Groq · gpt-oss</text>
+        <text x="625" y="66" text-anchor="middle" class="small">tekst + strict JSON</text>
+
+        <rect class="box ai" x="530" y="120" width="190" height="60" rx="6"/>
+        <text x="625" y="146" text-anchor="middle" class="t-ai">Voyage AI</text>
+        <text x="625" y="164" text-anchor="middle" class="small">embed · rerank</text>
+
+        <rect class="box db" x="530" y="218" width="190" height="60" rx="6"/>
+        <text x="625" y="244" text-anchor="middle" class="t-db">Supabase Postgres</text>
+        <text x="625" y="262" text-anchor="middle" class="small">pgvector · RLS</text>
+
+        <rect class="box" x="250" y="236" width="190" height="42" rx="6"/>
+        <text x="345" y="261" text-anchor="middle">Vercel cron (UTC 9/10/14)</text>
+
+        <line class="edge" x1="170" y1="150" x2="248" y2="150" marker-end="url(#ar1)"/>
+        <text x="209" y="140" text-anchor="middle" class="small">fetch /api/*</text>
+        <line class="edge" x1="440" y1="126" x2="528" y2="60" marker-end="url(#ar1)"/>
+        <text x="478" y="82" text-anchor="middle" class="small">generate*</text>
+        <line class="edge" x1="440" y1="150" x2="528" y2="150" marker-end="url(#ar1)"/>
+        <text x="484" y="142" text-anchor="middle" class="small">vektori</text>
+        <line class="edge" x1="440" y1="174" x2="528" y2="240" marker-end="url(#ar1)"/>
+        <text x="476" y="222" text-anchor="middle" class="small">SQL · rpc</text>
+        <line class="edge dash" x1="345" y1="236" x2="345" y2="198" marker-end="url(#ar1)"/>
+      </svg>
+    </div>
+    <figcaption>Tri spoljna servisa, svaki za jednu stvar. Groq piše tekst, Voyage pretvara tekst u vektore i preređuje kandidate, a Supabase čuva sve i radi vektorsku pretragu. Isprekidana strelica: cron okida iste API rute kao i korisnik.</figcaption>
+  </figure>
+</section>
+
+<!-- ───────────────────────────── 02 ───────────────────────────── -->
+<section class="chapter" id="capture">
+  <div class="kicker">Poglavlje 02</div>
+  <h2>Put jednog captura</h2>
+  <p>Šta se desi od trenutka kad pritisneš "save" (<code>POST /api/capture</code>):</p>
+  <ol class="steps">
+    <li><div><div class="what"><span class="chip api">API</span> <strong>Obogaćivanje linka</strong></div><div class="why">YouTube link → ceo transkript; obična stranica → og:title i opis. Model bez ovoga vidi samo URL.</div></div></li>
+    <li><div><div class="what"><span class="chip ai">GROQ</span> <strong>Kategorizacija: tip, projekat, naslov</strong></div><div class="why"><code>gpt-oss-20b</code>, strict šema sa enum-ima. Prompt sadrži opis svakog projekta. Ako LLM ne radi, uzimaju se podrazumevane vrednosti iz settingsa.</div></div></li>
+    <li><div><div class="what"><span class="chip ai">VOYAGE</span> <strong>Embedding naslova + teksta</strong></div><div class="why">1024 broja koji opisuju značenje. Ako Voyage ne radi, capture se ipak sačuva, a dnevni cron kasnije dopuni embedding.</div></div></li>
+    <li><div><div class="what"><span class="chip db">PGVECTOR</span> <strong>kNN glasanje za projekat</strong></div><div class="why">Isti embedding, jedan upit: ako se bar 3 od 5 najsličnijih captura slaže, njihov projekat pobeđuje LLM. Poglavlje 11.</div></div></li>
+    <li><div><div class="what"><span class="chip db">BAZA</span> <strong>INSERT</strong></div><div class="why">Klijentu se vraćaju kolone bez <code>embedding</code> (CAPTURE_COLUMNS), da 1024 broja nikad ne putuju u browser.</div></div></li>
+    <li><div><div class="what"><span class="chip fe">BROWSER</span> → <span class="chip db">PGVECTOR</span> <strong>Relate u pozadini</strong></div><div class="why">CaptureTab posle čuvanja zove <code>/api/relate</code>: do 6 captura sa sličnošću ≥ 0,71 postaju povezani, u oba smera. Bez LLM-a. Poglavlje 08.</div></div></li>
+  </ol>
+  <div class="note"><span class="label">Princip</span><p>Jedan embedding, tri upotrebe: pretraga, veze u grafu i kNN za projekat. Voyage se zove jednom po capture-u.</p></div>
+</section>
+
+<!-- ───────────────────────────── 03 ───────────────────────────── -->
+<section class="chapter" id="pitanje">
+  <div class="kicker">Poglavlje 03</div>
+  <h2>Put jednog pitanja (RAG)</h2>
+  <p><strong>RAG</strong> (Retrieval-Augmented Generation) ima dva koraka. Prvo se nađe nekoliko relevantnih captura (retrieval), pa se samo oni daju modelu da napiše odgovor (generation). Pre RAG-a, pretraga je slala poslednjih 100 captura. To je bilo skupo, a 20 najstarijih beleški pretraga nikad nije ni videla.</p>
+  <figure>
+    <div class="fig">
+      <svg viewBox="0 0 720 250" role="img" aria-label="Levak: od svih 120 captura vektorska pretraga bira 20, reranker 12, a LLM dobija po 1000 karaktera od svakog.">
+        <rect class="bar" x="20" y="20" width="680" height="40" rx="4"/>
+        <text x="34" y="45">svih 120 captura</text>
+        <text x="686" y="45" text-anchor="end" class="small">vektor: naslov + prvih 8.000 kar.</text>
+        <rect class="bar" x="110" y="80" width="500" height="40" rx="4"/>
+        <text x="124" y="105">pgvector → top 20</text>
+        <text x="596" y="105" text-anchor="end" class="small">kosinusna sličnost, HNSW</text>
+        <rect class="bar" x="190" y="140" width="340" height="40" rx="4"/>
+        <text x="204" y="165">reranker → top 12</text>
+        <text x="516" y="165" text-anchor="end" class="small">čita prvih 700 kar.</text>
+        <rect class="bar hot" x="250" y="200" width="220" height="40" rx="4"/>
+        <text x="360" y="225" text-anchor="middle">LLM: 12 × 1.000 kar.</text>
+      </svg>
+    </div>
+    <figcaption>Svaki korak vidi drugačiji deo teksta i bira manje kandidata. Chat radi isto, ali sa 15 → 8, i daje po 500 karaktera po capture-u, uz pinovan capture do 2.000.</figcaption>
+  </figure>
+  <h3>Šta kad nešto padne</h3>
+  <p>Svaki korak ima rezervu, a log beleži koja je upotrebljena:</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Ako padne</th><th>Onda</th><th>U <code>query_log.fallback</code></th></tr></thead>
+    <tbody>
+      <tr><td>reranker (rate limit, greška)</td><td>redosled iz vektorske pretrage</td><td><code>rerank</code></td></tr>
+      <tr><td>embedding ili pgvector</td><td>najnoviji capture-i</td><td><code>vector</code></td></tr>
+      <tr><td>LLM</td><td>poruka "AI is busy…" umesto odgovora</td><td>—</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note"><span class="label">Rupa koju treba znati</span><p>Ako je odgovor duboko u dugačkom transkriptu (na 5.000. karakteru), embedding ga vidi, pa pretraga nađe capture. Ali reranker i LLM vide samo početak. To rešava <strong>chunking</strong>: deljenje dugih captura na delove sa sopstvenim embeddingom.</p></div>
+</section>
+
+<!-- ───────────────────────────── 04 ───────────────────────────── -->
+<section class="chapter" id="embeddinzi">
+  <div class="kicker">Poglavlje 04</div>
+  <h2>Embeddinzi i pgvector</h2>
+  <p><strong>Embedding</strong> je tekst pretvoren u niz brojeva (ovde 1024). Model je treniran da tekstovi sličnog značenja dobiju bliske vektore, čak i kad nemaju zajedničku reč. Pojedinačni brojevi ne znače ništa; bitan je samo položaj u odnosu na druge vektore.</p>
+  <p>Blizina se meri <strong>kosinusnom sličnošću</strong> (1 = isto značenje, 0 = nema veze). Prava merenja na tvojoj bazi:</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>"šta je deadlock" ↔</th><th class="num">sličnost</th></tr></thead>
+    <tbody>
+      <tr><td>"two processes waiting for each other forever"</td><td class="num">0,517</td></tr>
+      <tr><td>"zastoj kad dva procesa čekaju jedan drugog"</td><td class="num">0,483</td></tr>
+      <tr><td>"recept za palačinke"</td><td class="num">0,194</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Detalji koji prave razliku</h3>
+  <ul>
+    <li><strong><code>input_type</code>:</strong> capture se ugrađuje kao <code>document</code>, pitanje kao <code>query</code>. Voyage interno doda instrukciju, jer su pitanja kratka, a beleške dugačke.</li>
+    <li><strong>Isti recept svuda:</strong> embedding je uvek naslov + tekst. Ako se vektori prave na različite načine, skorovi više nisu uporedivi.</li>
+    <li><strong>Sečenje na 8.000 karaktera:</strong> zbog rate limita (10K tokena u minuti bez kartice) i zato što jedan vektor za ceo sat videa postaje "prosek svega".</li>
+    <li><strong>HNSW indeks:</strong> brza približna pretraga najbližih suseda. Sa 120 captura bi i pun prolaz bio instant, ali sa 100.000 ne bi.</li>
+    <li><strong>Pretraga u bazi:</strong> funkcija <code>match_captures()</code> radi poređenje u Postgresu, pa se preko mreže ne vuku svi vektori. Ima <code>where user_id = …</code>, a RLS važi i za nju: neulogovan poziv sa tuđim ID-em dobije 0 redova (provereno).</li>
+    <li><strong>Embedding nikad ne ide u browser:</strong> <code>CAPTURE_COLUMNS</code> umesto <code>select("*")</code>.</li>
+  </ul>
+  <h3>Zašto Voyage</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Opcija</th><th>Srpski</th><th>Cena</th><th>Odluka</th></tr></thead>
+    <tbody>
+      <tr class="win"><td>Voyage voyage-3.5-lite</td><td>višejezičan</td><td>200M tokena besplatno</td><td>izabran; Anthropic ga preporučuje</td></tr>
+      <tr class="lose"><td>OpenAI text-embedding-3-small</td><td>višejezičan</td><td>bez besplatnog nivoa</td><td>sličan kvalitet, treba kartica</td></tr>
+      <tr class="lose"><td>Supabase gte-small</td><td>samo engleski</td><td>besplatan</td><td>beleške su pola na srpskom</td></tr>
+      <tr class="lose"><td>lokalni model</td><td>zavisi od modela</td><td>besplatan</td><td>~100MB+ model, spor na Vercelu</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note"><span class="label">Pravilo</span><p>Vektori različitih modela nisu uporedivi. Promena modela znači promenu dimenzije kolone i ponovni backfill svih captura. Zato se model bira rano.</p></div>
+</section>
+
+<!-- ───────────────────────────── 05 ───────────────────────────── -->
+<section class="chapter" id="reranker">
+  <div class="kicker">Poglavlje 05</div>
+  <h2>Reranker</h2>
+  <p>Vektorska pretraga je brza jer se vektori captura izračunaju jednom unapred, ali model nikad ne vidi pitanje i belešku <em>zajedno</em>. Reranker ih čita zajedno i daje skor za svaki par. Precizniji je, ali sporiji, pa se koristi samo na malom broju kandidata.</p>
+  <figure>
+    <div class="fig">
+      <svg viewBox="0 0 720 210" role="img" aria-label="Levo: bi-encoder pretvara pitanje i capture odvojeno u vektore i poredi ih. Desno: reranker prima pitanje i capture zajedno i vraća skor.">
+        <defs>
+          <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head"/></marker>
+        </defs>
+        <text x="20" y="22" class="t-ai">EMBEDDING (bi-encoder)</text>
+        <rect class="box" x="20" y="38" width="100" height="34" rx="5"/><text x="70" y="60" text-anchor="middle">pitanje</text>
+        <rect class="box" x="20" y="128" width="100" height="34" rx="5"/><text x="70" y="150" text-anchor="middle">capture</text>
+        <rect class="box ai" x="150" y="38" width="100" height="34" rx="5"/><text x="200" y="60" text-anchor="middle">model</text>
+        <rect class="box ai" x="150" y="128" width="100" height="34" rx="5"/><text x="200" y="150" text-anchor="middle">model</text>
+        <rect class="box" x="276" y="82" width="64" height="34" rx="5"/><text x="308" y="104" text-anchor="middle">cos</text>
+        <line class="edge" x1="120" y1="55" x2="148" y2="55" marker-end="url(#ar2)"/>
+        <line class="edge" x1="120" y1="145" x2="148" y2="145" marker-end="url(#ar2)"/>
+        <line class="edge" x1="250" y1="55" x2="290" y2="80" marker-end="url(#ar2)"/>
+        <line class="edge" x1="250" y1="145" x2="290" y2="118" marker-end="url(#ar2)"/>
+        <text x="200" y="190" text-anchor="middle" class="small">odvojeno; capture unapred → brzo</text>
+
+        <line x1="372" y1="18" x2="372" y2="192" class="edge dash"/>
+
+        <text x="400" y="22" class="t-ai">RERANKER (cross-encoder)</text>
+        <rect class="box" x="400" y="82" width="150" height="34" rx="5"/><text x="475" y="104" text-anchor="middle">pitanje + capture</text>
+        <rect class="box ai" x="578" y="82" width="70" height="34" rx="5"/><text x="613" y="104" text-anchor="middle">model</text>
+        <rect class="box" x="672" y="82" width="40" height="34" rx="5"/><text x="692" y="104" text-anchor="middle">0,62</text>
+        <line class="edge" x1="550" y1="99" x2="576" y2="99" marker-end="url(#ar2)"/>
+        <line class="edge" x1="648" y1="99" x2="670" y2="99" marker-end="url(#ar2)"/>
+        <text x="556" y="190" text-anchor="middle" class="small">zajedno, za svaki par → precizno, sporo</text>
+      </svg>
+    </div>
+    <figcaption>Razlika je u jednoj strelici: bi-encoder spaja pitanje i capture tek na kraju (kosinus), a cross-encoder ih spaja na ulazu. Zato se koriste u dve faze: vektori biraju 15–20 kandidata, reranker ih poređa.</figcaption>
+  </figure>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Pitanje iz evala</th><th class="num">samo vektori</th><th class="num">+ reranker</th></tr></thead>
+    <tbody>
+      <tr><td>which internships am I choosing between</td><td class="num">6. mesto</td><td class="num">1.</td></tr>
+      <tr><td>kako da testiram metodu koja ništa ne vraća…</td><td class="num">3.</td><td class="num">1.</td></tr>
+      <tr><td>koji auto imam</td><td class="num">2.</td><td class="num">1.</td></tr>
+    </tbody>
+  </table></div>
+  <p>Cena: oko 2.300 tokena i ~0,6 s po upitu (<code>rerank-2.5</code>). Ništa što su vektori imali na 1. mestu nije pokvareno.</p>
+</section>
+
+<!-- ───────────────────────────── 06 ───────────────────────────── -->
+<section class="chapter" id="keyword">
+  <div class="kicker">Poglavlje 06</div>
+  <h2>Keyword, BM25 i hybrid</h2>
+  <h3>Zašto je stari chat promašivao</h3>
+  <p>Stari <code>findContext</code> je brojao koliko reči iz pitanja se pojavljuje <em>bilo gde</em> u capture-u, i delove reči. Za "šta su me pitali na <strong>Malkier</strong> intervjuu", reči "me", "na", "su" su delovi skoro svake srpske reči ("i<u>me</u>", "<u>na</u>ša"), pa su nebitne beleške dobile 4 boda. Prava beleška je bila na <strong>59. mestu</strong>.</p>
+  <h3>BM25: keyword pretraga urađena kako treba</h3>
+  <pre><code>skor += IDF(reč) × tf·(k1+1) / (tf + k1·(1 − b + b·dužina/prosek))</code></pre>
+  <ul>
+    <li><strong>IDF:</strong> retka reč vredi više. Na tvojoj bazi: "na" je u 50 od 120 captura (IDF 0,87), "malkier" u 4 (3,29), "stipendija" u 1 (4,39).</li>
+    <li><strong>Zasićenje (k1 = 1,2):</strong> ponavljanje pomaže, ali opadajuće.</li>
+    <li><strong>Dužina (b = 0,75):</strong> pogodak u kratkoj belešci znači više.</li>
+    <li><strong>Bez treninga:</strong> sve se dobija prebrojavanjem kolekcije. Rođak Naive Bayesa (vreća reči, nezavisnost reči), ali rangira, ne klasifikuje.</li>
+  </ul>
+  <p>Implementacija je proverena dvaput: ručno izračunatim vrednostima (<code>eval/check-ranking.mjs</code>) i bibliotekom <code>rank_bm25</code> (razlika 3,6·10⁻¹⁵).</p>
+  <h3>Hybrid (RRF) i zašto je odbijen</h3>
+  <p><strong>Reciprocal Rank Fusion</strong> spaja dve liste po mestima: svaki capture dobije <code>1/(60 + mesto)</code> iz svake liste. Ne poredi skorove, jer su BM25 i kosinus na različitim skalama.</p>
+  <p>Na tvojim podacima je hybrid <strong>pao sa 96% na 78%</strong> (hit@3). Kad BM25 nema pravi pogodak (npr. "koji auto imam", a u belešci piše "automatik"), vraća šum, a RRF tom šumu daje istu težinu kao vektorima. Tačan odgovor je skliznuo sa 2. na 7. mesto. Uz to, srpski menja reči kroz padeže ("Village Book<u>eru</u>" ≠ "Booker"), a BM25 poredi cele reči.</p>
+  <div class="note"><span class="label">Lekcija</span><p>Hybrid je standard, ali ne pomaže automatski. Pomaže kad su oba pretraživača približno dobra i kad postoje pitanja koja vektori promašuju. Ovde vektori već imaju 100% na tačnim terminima. Hybrid nismo "spasavali" podešavanjem težina, jer bi to bio overfitting na 21 pitanje.</p></div>
+</section>
+
+<!-- ───────────────────────────── 07 ───────────────────────────── -->
+<section class="chapter" id="eval">
+  <div class="kicker">Poglavlje 07</div>
+  <h2>Evaluacija</h2>
+  <p><strong>Golden dataset</strong>: 26 pitanja, i za svako unapred zapisano koji capture-i treba da se vrate. Pitanja su podeljena u tipove, da poređenje bude fer: tačan termin, parafraza, drugi jezik, lično, pregled i agregat.</p>
+  <h3>Metrike</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Metrika</th><th>Pitanje koje postavlja</th><th>Kad je bitna</th></tr></thead>
+    <tbody>
+      <tr><td><code>hit@1</code></td><td>Da li je prvi rezultat tačan?</td><td>kad jedan capture odgovara</td></tr>
+      <tr><td><code>hit@3</code></td><td>Da li je bar jedan tačan među prva 3?</td><td>"da li je LLM dobio nešto korisno"</td></tr>
+      <tr><td><code>recall@5</code></td><td>Koliki deo <em>svih</em> tačnih je u top 5?</td><td>"kojim firmama sam slao prijave" (6 tačnih)</td></tr>
+      <tr><td><code>MRR</code></td><td>1 / mesto prvog tačnog</td><td>jedan broj za ceo redosled</td></tr>
+    </tbody>
+  </table></div>
+  <p>Primer razlike: pitanje "koje projekte trenutno imam" ima hit@1 = 100% (prvi rezultat tačan), ali recall@5 = 25% (od 4 projekta, samo jedan je u top 5). Isti koncept kao recall@k iz diplomskog.</p>
+  <h3>Rezultati retrievala</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Metoda</th><th class="num">hit@1</th><th class="num">hit@3</th><th class="num">recall@5</th><th class="num">MRR</th></tr></thead>
+    <tbody>
+      <tr class="lose"><td>stari keyword (findContext)</td><td class="num">17%</td><td class="num">39%</td><td class="num">30%</td><td class="num">0,29</td></tr>
+      <tr class="lose"><td>BM25</td><td class="num">35%</td><td class="num">52%</td><td class="num">44%</td><td class="num">0,46</td></tr>
+      <tr><td>vektori</td><td class="num">83%</td><td class="num">96%</td><td class="num">87%</td><td class="num">0,89</td></tr>
+      <tr class="lose"><td>hybrid BM25 + vektori (RRF)</td><td class="num">61%</td><td class="num">78%</td><td class="num">72%</td><td class="num">0,71</td></tr>
+      <tr class="win"><td>vektori + reranker (produkcija)</td><td class="num">100%</td><td class="num">100%</td><td class="num">94%</td><td class="num">1,00</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Zamke koje smo prošli</h3>
+  <ul>
+    <li><strong>Zasićen eval:</strong> 100% ne znači savršenu pretragu, nego da je dataset prelak. Više ne može da pokaže da li chunking ili query rewriting pomažu. Rešenje je teži dataset iz pravih pitanja (<code>query_log</code>).</li>
+    <li><strong>Overfitting na eval:</strong> podešavanje mnogo parametara na istih 21 pitanje podiže brojeve, ali ne i stvarni kvalitet.</li>
+    <li><strong>Ko piše pitanja:</strong> pitanja pisana gledajući beleške su lakša od pravih.</li>
+    <li><strong>Pošten protivnik:</strong> "39%" je stari jednostavni algoritam, a ne BM25. Tako se i kaže.</li>
+    <li><strong>Aggregate pitanja</strong> ("šta sam poslednje učio", "otvoreni taskovi"): 0% za sve metode. To nisu pitanja o sličnosti nego o vremenu i stanju. Rešenje je router ili agent.</li>
+  </ul>
+</section>
+
+<!-- ───────────────────────────── 08 ───────────────────────────── -->
+<section class="chapter" id="prag">
+  <div class="kicker">Poglavlje 08</div>
+  <h2>Prag za veze (relate)</h2>
+  <p>Dva captura su povezana ako im je kosinusna sličnost iznad praga. Prvobitni prag 0,5 je bio izmišljen, a merenje je pokazalo da ne filtrira ništa: sličnost capture↔capture je uglavnom 0,6–0,9, mnogo više nego pitanje↔capture (~0,45).</p>
+  <h3>Kako je prag izmeren</h3>
+  <ol class="steps">
+    <li><div><div class="what"><strong>491 kandidat-par</strong></div><div class="why">Za svaki capture njegovih 6 najbližih suseda.</div></div></li>
+    <li><div><div class="what"><strong>LLM-as-a-judge</strong></div><div class="why">Model je označio svaki par "povezano / nije", na slepo, bez skora sličnosti. Pravilo: ista konkretna tema ili projekat, a ne samo ista šira oblast.</div></div></li>
+    <li><div><div class="what"><strong>Provera sudije</strong></div><div class="why">20 parova iz sive zone si označio ti. Prvo slaganje 13/20, a posle tvoje ispravke 17/20. Razlog je bio što si gledao samo naslove, a sudija i tekst.</div></div></li>
+    <li><div><div class="what"><strong>Precision, recall, F1 za svaki prag</strong></div><div class="why">Najbolji F1 je na 0,71.</div></div></li>
+  </ol>
+  <div class="explorer" aria-live="polite">
+    <label for="th">Prag sličnosti <input id="th" type="range" min="0.60" max="0.82" step="0.01" value="0.71"> <span id="thv">0,71</span></label>
+    <div class="stats">
+      <div class="stat"><div class="k">Precision</div><div class="v" id="pv">70%</div><div class="meter"><i id="pm" style="width:70%"></i></div></div>
+      <div class="stat"><div class="k">Recall</div><div class="v" id="rv">82%</div><div class="meter"><i id="rm" style="width:82%"></i></div></div>
+      <div class="stat"><div class="k">F1</div><div class="v" id="fv">0,755</div><div class="meter"><i id="fm" style="width:75%"></i></div></div>
+    </div>
+    <p class="verdict" id="verdict">Najbolji balans: 7 od 10 prikazanih veza je tačno, a hvata se 82% pravih veza.</p>
+  </div>
+  <p>Pomeri klizač: ispod 0,70 dobijaš skoro sve prave veze, ali polovina prikazanih je šum. Iznad 0,78 su sve tačne, ali propuštaš većinu.</p>
+  <div class="note"><span class="label">Lekcija</span><p>Sudija i čovek moraju da gledaju iste informacije. Pre nego što se veruje LLM sudiji, proverava se na malom uzorku protiv čoveka.</p></div>
+</section>
+
+<!-- ───────────────────────────── 09 ───────────────────────────── -->
+<section class="chapter" id="structured">
+  <div class="kicker">Poglavlje 09</div>
+  <h2>Structured outputs</h2>
+  <p>Aplikacija je prošla kroz sva tri načina da se od modela dobije JSON:</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Način</th><th>Kako</th><th>Garancija</th></tr></thead>
+    <tbody>
+      <tr class="lose"><td>Zamoliti u promptu</td><td>"Return ONLY valid JSON", pa <code>JSON.parse</code>, uz skidanje <code>```json</code> ograda</td><td>nikakva: polje fali, rečenica ispred, izmišljen tip</td></tr>
+      <tr class="lose"><td>Tool calling (forsiran)</td><td>model "zove funkciju" čiji parametri imaju šemu</td><td>visoka, ali ne potpuna</td></tr>
+      <tr class="win"><td>Strict structured output</td><td><code>json_schema</code> + <code>strict: true</code></td><td>skoro potpuna: neispravan izlaz se odbija, ne propušta</td></tr>
+    </tbody>
+  </table></div>
+  <p><strong>Constrained decoding:</strong> dok model piše token po token, provider dozvoljava samo tokene koji drže izlaz validnim po šemi. Posle <code>"type": "</code> model ne može da napiše "Article". Kao padajući meni umesto slobodnog polja.</p>
+  <div class="note"><span class="label">Kad "garantovano" nije garantovano</span><p>Dokumentacija kaže da strict mod garantuje šemu, i ova beležnica je to prvo i tvrdila. Eval je pokazao drugačije. Capture sa listom od šest linkova vratio se kao <strong>niz od šest objekata</strong>, a Groq ga je odbio greškom <code>json_validate_failed</code> umesto da ga propusti. Loš podatak i dalje ne ulazi u bazu, ali greška mora da se obradi. Zato <code>generateObject</code> pokušava još jednom, sa napomenom "tačno jedan objekat, nikad niz", a tek drugi neuspeh ide na rezervu (podrazumevane vrednosti). Pouka: tvrdnja iz dokumentacije nije dokaz, eval jeste.</p></div>
+  <h3>Poznate greške modela i retry</h3>
+  <p>Sledeći prolaz evala je otkrio i drugu: <code>gpt-oss</code> je treniran sa ugrađenim alatima (pretraga, Python), pa ponekad pokuša da pozove alat iako nijedan nije dat. Obe greške se sad obrađuju na jednom mestu u <code>lib/llm.ts</code>, za sve AI pozive:</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Groq greška</th><th>Šta model uradi</th><th>Napomena u drugom pokušaju</th></tr></thead>
+    <tbody>
+      <tr><td><code>json_validate_failed</code></td><td>vrati niz umesto objekta</td><td>"tačno jedan JSON objekat, nikad niz"</td></tr>
+      <tr><td><code>tool_use_failed</code></td><td>pozove alat koji ne postoji</td><td>"nemaš alate, odgovori direktno"</td></tr>
+    </tbody>
+  </table></div>
+  <p>Nova poznata greška se dodaje kao jedan red u tabelu <code>RETRY_HINTS</code>. Eval jedan neuspeh računa kao promašaj i nastavlja, jer bi i produkcija tada koristila podrazumevane vrednosti.</p>
+  <h3>Enum kao zaštita</h3>
+  <pre><code>project:     { enum: [...postojeći projekti] }         // ne može da izmisli projekat
+relevantIds: { items: { enum: [...ID-evi koji su poslati] } } // ne može da izmisli ID</code></pre>
+  <p>Pravila strict moda: svako polje u <code>required</code>, <code>additionalProperties: false</code> na svakom objektu, a opciono polje se piše kao <code>["string", "null"]</code>.</p>
+  <h3>Kad enum ne koristiti</h3>
+  <p>Digest ima 60 captura. Enum od 60 UUID-a bi koštao hiljade tokena, jer i šema ulazi u prompt. Zato model vidi redne brojeve (0–59), vraća brojeve, a kod ih prevodi nazad u ID-eve.</p>
+</section>
+
+<!-- ───────────────────────────── 10 ───────────────────────────── -->
+<section class="chapter" id="llm">
+  <div class="kicker">Poglavlje 10</div>
+  <h2>LLM sloj i provider</h2>
+  <p>Sve rute zovu <code>generateText</code> ili <code>generateObject</code> iz <code>lib/llm.ts</code> i ne znaju koji provider je ispod (<strong>adapter pattern</strong>). Kad je Anthropic kredit pao na nulu, prelazak na Groq je bio izmena jednog sloja, a nijedna ruta nije morala da zna za to.</p>
+  <h3>Groq free tier, i šta to znači za prompt</h3>
+  <p>Po modelu: 30 zahteva/min, 1.000/dan, <strong>8.000 tokena/min</strong>, 200.000/dan. Uska grla je 8K u minuti, pa se kontrolisano bira šta ulazi u prompt (<em>context budgeting</em>):</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Funkcija</th><th>Model</th><th class="num">~tokena</th><th>Kako je skraćeno</th></tr></thead>
+    <tbody>
+      <tr><td>kategorizacija</td><td><code>gpt-oss-20b</code></td><td class="num">0,3–1,5K</td><td>prvih 4.000 karaktera</td></tr>
+      <tr><td>search</td><td><code>gpt-oss-120b</code></td><td class="num">5–6K</td><td>12 × 1.000 kar. umesto celih tekstova</td></tr>
+      <tr><td>chat</td><td><code>gpt-oss-120b</code></td><td class="num">2–3K</td><td>8 × 500 kar.</td></tr>
+      <tr><td>digest</td><td><code>gpt-oss-120b</code></td><td class="num">~5K</td><td>60 captura, redni brojevi umesto UUID-a</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Reasoning modeli</h3>
+  <p><code>gpt-oss</code> pre odgovora proizvede skrivene "misli": u testu kategorizacije, 41 od 72 izlazna tokena. Zato <code>maxTokens</code> mora da pokrije i razmišljanje, a <code>reasoning_effort: "low"</code> ga drži kratkim.</p>
+  <div class="note"><span class="label">Šta krediti nisu bili</span><p>Kredit nije nestao zbog cene po tokenu, nego zbog baga: weekly digest se pravio 4–6 puta svakog ponedeljka (2 cron pokretanja × broj uređaja), sa Sonnetom i 80 captura. Poglavlje 12.</p></div>
+</section>
+
+<!-- ───────────────────────────── 11 ───────────────────────────── -->
+<section class="chapter" id="kategorizacija">
+  <div class="kicker">Poglavlje 11</div>
+  <h2>Kategorizacija</h2>
+  <p>Prvi eval: tip 80%, projekat samo <strong>46%</strong>. Ali samo kod 31 od 120 captura su se slagali sačuvani projekat, LLM i kNN. Problem nisu bili modeli, nego <strong>oznake</strong>: tehničke beleške su bile podeljene između "Personal" i "Other" bez ikakvog pravila.</p>
+  <h3>Rešenje: prvo pravila, pa oznake</h3>
+  <ul>
+    <li>Jedna rečenica po projektu (annotation guidelines). Te rečenice ulaze i u prompt.</li>
+    <li>"Other" je razbijen na <strong>Software Engineering</strong> i <strong>AI Engineering</strong>, a fintech je ostao u Other.</li>
+    <li>Projekti idu <strong>po temi</strong>: FON drži samo fakultet kao takav (planovi, predmeti, kolokvijumi, diplomski), a znanje sa predmeta ide po temi. Ovo je otkrio eval: LLM je "grešio" stavljajući Maven u SE, a bio je u pravu.</li>
+  </ul>
+  <figure>
+    <div class="fig">
+      <svg viewBox="0 0 640 220" role="img" aria-label="Novi capture u sredini; pet najsličnijih captura oko njega: tri u Software Engineering, jedan FON, jedan AI Engineering; tri od pet se slažu pa projekat postaje Software Engineering.">
+        <circle cx="200" cy="110" r="26" class="box api"/>
+        <text x="200" y="114" text-anchor="middle" class="t-api">novi</text>
+        <line class="edge" x1="200" y1="84" x2="200" y2="44"/><line class="edge" x1="226" y1="110" x2="290" y2="110"/><line class="edge" x1="200" y1="136" x2="200" y2="176"/><line class="edge" x1="178" y1="96" x2="122" y2="60"/><line class="edge" x1="178" y1="124" x2="122" y2="160"/>
+        <circle cx="200" cy="30" r="14" class="box db"/><text x="222" y="34" class="small">SE 0,82</text>
+        <circle cx="304" cy="110" r="14" class="box db"/><text x="326" y="114" class="small">SE 0,79</text>
+        <circle cx="200" cy="190" r="14" class="box db"/><text x="222" y="194" class="small">SE 0,77</text>
+        <circle cx="110" cy="52" r="14" class="box"/><text x="60" y="34" class="small">FON 0,75</text>
+        <circle cx="110" cy="168" r="14" class="box ai"/><text x="40" y="200" class="small">AI Eng. 0,74</text>
+        <text x="420" y="92">3 od 5 → Software Engineering</text>
+        <text x="420" y="114" class="small">≥ 3 se slažu: susedi pobeđuju LLM</text>
+        <text x="420" y="134" class="small">&lt; 3: odlučuje LLM (vidi sve projekte)</text>
+      </svg>
+    </div>
+    <figcaption>kNN glasanje (primer, ne pravi brojevi): projekat dolazi iz tvojih navika, a ne iz opšteg znanja modela. Koristi embedding koji je već napravljen, pa ne traži dodatni Voyage poziv.</figcaption>
+  </figure>
+  <h3>Prvo merenje (stare oznake)</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Metoda</th><th class="num">projekat</th></tr></thead>
+    <tbody>
+      <tr class="lose"><td>LLM + opisi projekata</td><td class="num">63%</td></tr>
+      <tr><td>kNN (5 suseda, leave-one-out)</td><td class="num">75%</td></tr>
+      <tr><td>kNN ako ≥ 3/5 se slažu, inače LLM</td><td class="num">73%</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note"><span class="label">Odluka kad su brojevi isti</span><p>75% i 73% se razlikuju za 2 captura od 120, što je šum. Odlučuje se po tome kako metoda greši: kNN ne može da izabere projekat koji još nema capture-e (cold start), a LLM može.</p></div>
+  <h3>Posle pravila "po temi", sa few-shot LLM-om</h3>
+  <p><strong>Few-shot:</strong> LLM uz capture dobija i 5 najsličnijih captura sa njihovim projektima, kao primere tvojih navika.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Metoda (sadašnje oznake, 120 captura)</th><th class="num">projekat</th></tr></thead>
+    <tbody>
+      <tr class="lose"><td>few-shot LLM sam</td><td class="num">78%</td></tr>
+      <tr><td>kNN sam</td><td class="num">82%</td></tr>
+      <tr class="win"><td>kNN ako ≥ 3/5 se slažu, inače few-shot LLM</td><td class="num">85%</td></tr>
+    </tbody>
+  </table></div>
+  <p>Sad kombinacija pobeđuje obe metode, jer se dopunjuju. kNN odlučuje 98 captura (90% tačno), a LLM samo 22 kod kojih se susedi ne slažu (64%). Tih 22 su po definiciji najteži slučajevi. LLM sam pogađa Village Booker samo 2 od 6 puta ("Spring Boot + Neon" mu zvuči kao SE), a kNN to ispravlja.</p>
+  <h3>Da li few-shot ide u produkciju? Ne.</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Sadašnje oznake, 120 captura</th><th class="num">bez few-shot-a</th><th class="num">sa few-shot-om</th></tr></thead>
+    <tbody>
+      <tr><td>LLM sam</td><td class="num">77%</td><td class="num">78%</td></tr>
+      <tr class="win"><td>kNN ≥ 3/5, inače LLM</td><td class="num">84%</td><td class="num">85%</td></tr>
+    </tbody>
+  </table></div>
+  <p>Razlika je 1 capture. U produkciji bi few-shot tražio drugi LLM poziv za ~18% captura, jer susedi postoje tek posle embeddinga, a embedding koristi naslov koji daje LLM (kokoška i jaje). Više koda i tokena za razliku u granicama šuma, pa produkcija ostaje kakva jeste. Few-shot ne pomaže zato što kNN već koristi istu informaciju (gde su susedi razvrstani) tamo gde se susedi slažu.</p>
+  <div class="note"><span class="label">Lekcija</span><p>Eval ne služi samo da potvrdi šta treba napraviti, nego i da pokaže šta ne treba. Projekat je sa 46% stigao do 84% najviše zahvaljujući sređenim oznakama i kNN-u, a ne boljem promptu.</p></div>
+  <p><strong>Source of truth:</strong> sačuvane oznake su većinom birali stari modeli. Eval meri slaganje sa oznakama, a ne "istinu". Kad su oznake loše, i dobar model izgleda loše.</p>
+</section>
+
+<!-- ───────────────────────────── 12 ───────────────────────────── -->
+<section class="chapter" id="operativa">
+  <div class="kicker">Poglavlje 12</div>
+  <h2>Rad u produkciji</h2>
+  <h3>Idempotentnost (bag sa digestom)</h3>
+  <p>Cron se pokreće u 09:00 i 14:00 UTC, a digest se pravio u petlji po push pretplatama. 2 pokretanja × 2–3 uređaja dalo je 4–6 digesta svakog ponedeljka, i kad nije bilo novih captura. Popravka: grupisanje po korisniku, a digest se preskače ako postoji iz poslednjih 6 dana ili ako nema novih captura. Koliko god puta da se posao pokrene, rezultat je isti.</p>
+  <h3>Self-healing</h3>
+  <p>Čuvanje captura je best-effort: ako Voyage ne radi, capture ostaje bez embeddinga i nevidljiv je za pretragu. Dnevni cron (<code>task-due</code>, 10:00 UTC) popuni takve capture-e i zapiše koliko ih je bilo.</p>
+  <h3>Observability: <code>query_log</code></h3>
+  <p>Svako pitanje iz pretrage i chata upisuje šta je vraćeno i da li je bio fallback. Tihi problemi postaju vidljivi, a usput se skuplja teži eval dataset od pravih pitanja.</p>
+  <h3>Podešavanja i bezbednost</h3>
+  <ul>
+    <li>Podsetnici biraju postojeći termin (jutro/popodne/oba). Nema satnog crona, pa nema ni dodatnog opterećenja.</li>
+    <li>Brisanje podataka traži upisanu frazu, i server je proverava ponovo.</li>
+    <li>Service ključ (zaobilazi RLS) koristi se samo u cronu i brisanju, i uvek sa <code>eq("user_id", …)</code>.</li>
+    <li>Rezultati evala u javnom repou čuvaju samo kratke ID-eve, bez naslova. Rezervne kopije su u <code>backups/</code> (gitignored).</li>
+  </ul>
+</section>
+
+<!-- ───────────────────────────── 13 ───────────────────────────── -->
+<section class="chapter" id="odluke">
+  <div class="kicker">Poglavlje 13</div>
+  <h2>Odluke i alternative</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Odluka</th><th>Izabrano</th><th>Alternative</th><th>Na osnovu čega</th></tr></thead>
+    <tbody>
+      <tr><td>embedding model</td><td>Voyage 3.5-lite</td><td>OpenAI, gte-small, lokalni</td><td>srpski + besplatnih 200M tokena</td></tr>
+      <tr><td>retrieval</td><td>vektori + reranker</td><td>keyword, BM25, hybrid</td><td>eval: hit@1 100%</td></tr>
+      <tr><td>hybrid search</td><td>odbijen</td><td>RRF sa težinama</td><td>eval: 78% &lt; 96%; tuning bi bio overfitting</td></tr>
+      <tr><td>prag za relate</td><td>0,71</td><td>0,5 (izmišljen), 0,68</td><td>najbolji F1 na 491 paru</td></tr>
+      <tr><td>LLM provider</td><td>Groq gpt-oss</td><td>Anthropic, Jev</td><td>besplatno; Jev traži $5 i listu čekanja</td></tr>
+      <tr><td>JSON od modela</td><td>strict structured output + 1 retry</td><td>JSON.parse, tool calling</td><td>loš JSON nikad ne stigne do koda; retry za <code>json_validate_failed</code></td></tr>
+      <tr><td>projekat captura</td><td>kNN ≥ 3/5, inače LLM</td><td>samo LLM, samo kNN, few-shot</td><td>84% &gt; kNN 82% &gt; LLM 77%; rešava cold start</td></tr>
+      <tr><td>few-shot u produkciji</td><td>odbijen</td><td>drugi LLM poziv kad se susedi ne slažu</td><td>+1 capture od 120, uz više koda i tokena</td></tr>
+      <tr><td>jedan projekat ili tagovi</td><td>jedan</td><td>tagovi (više-na-više)</td><td>pretraga ne gleda projekat</td></tr>
+      <tr><td>vreme podsetnika</td><td>postojeći termini</td><td>satni cron</td><td>nula dodatnog opterećenja</td></tr>
+      <tr><td>registracija</td><td>zatvorena; demo nalog u planu</td><td>otvorena</td><td>zajednički Groq limiti, tuđi podaci</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ───────────────────────────── 14 ───────────────────────────── -->
+<section class="chapter" id="provera">
+  <div class="kicker">Poglavlje 14</div>
+  <h2>Pitanja za proveru</h2>
+  <p>Odgovori prvo sam, pa otvori.</p>
+  <details><summary>Zašto pretraga ne koristi prag sličnosti, a relate koristi?</summary><div class="a"><p>Pretraga uvek uzme top-k, pa LLM odluči šta je relevantno: vektori su "široka mreža", LLM je filter. Relate nema LLM posle sebe, jer se veze direktno prikazuju u grafu, pa je prag jedini filter.</p></div></details>
+  <details><summary>Zašto embedding pitanja koristi input_type "query", a capture "document"?</summary><div class="a"><p>Pitanja su kratka, a beleške dugačke. Model malo drugačije kodira tekst kojim se traži i tekst koji se čuva, da bi ih bolje povezao.</p></div></details>
+  <details><summary>Šta je razlika između hit@3 i recall@5?</summary><div class="a"><p>hit@3 je da/ne: da li je bar jedan tačan među prva 3. recall@5 je udeo: koliko od svih tačnih je stiglo u top 5. "Koje projekte imam" ima hit 100%, a recall 25%.</p></div></details>
+  <details><summary>Zašto je hybrid (BM25 + vektori) bio gori od samih vektora?</summary><div class="a"><p>RRF daje istu težinu obema listama. Kad BM25 nema pravi pogodak, vraća šum koji gura tačne vektorske rezultate dole. Uz to, srpska morfologija obara BM25.</p></div></details>
+  <details><summary>Šta je constrained decoding, i da li strict mod stvarno garantuje šemu?</summary><div class="a"><p>Dok model generiše, provider dozvoljava samo tokene koji drže izlaz validnim po JSON šemi. Na Groq-u to u praksi nije apsolutno: jednom je model vratio niz umesto objekta, a Groq je odgovorio greškom <code>json_validate_failed</code>. Garancija je da loš JSON ne stigne do koda, a ne da greške nema. Zato postoji retry.</p></div></details>
+  <details><summary>Zašto u search šemi relevantIds ima enum, a u digestu redni brojevi?</summary><div class="a"><p>Search šalje 12 captura, pa je enum od 12 ID-eva jeftin. Digest šalje 60, a šema ulazi u prompt, pa bi enum od 60 UUID-a pojeo tokene. Redni brojevi koštaju 1–2 tokena.</p></div></details>
+  <details><summary>Kako znaš da je LLM sudija bio pouzdan?</summary><div class="a"><p>Uzorak od 20 parova iz sive zone označio je čovek, nezavisno. Slaganje 17/20 je bilo iznad unapred zadate granice od 16. Pre ispravke je bilo 13/20, jer su čovek i sudija gledali različite informacije.</p></div></details>
+  <details><summary>Zašto kombinacija kNN + LLM, kad je u prvom merenju sam kNN imao 2 poena više?</summary><div class="a"><p>Razlika od 2 captura od 120 je šum, pa odluka ide po tome kako metode greše: kNN ne može da predvidi projekat bez primera (cold start). Na doslednijim oznakama kombinacija je posle i izmereno bolja: 85% naprema 82%.</p></div></details>
+  <details><summary>Few-shot je bio 1 capture bolji. Zašto nije ušao u produkciju?</summary><div class="a"><p>1 od 120 je šum, a u produkciji bi tražio drugi LLM poziv za ~18% captura, jer susedi postoje tek posle embeddinga. Kad dobit nije izmerljiva, jednostavnije rešenje pobeđuje.</p></div></details>
+  <details><summary>Zašto je LLM u kombinaciji "samo" 64% tačan, a ipak koristan?</summary><div class="a"><p>LLM odlučuje samo kad se 5 suseda ne slaže, a to su najteži slučajevi. Na njima je 64% bolje od kNN-a, koji tu nema jasnu većinu.</p></div></details>
+  <details><summary>Zašto eval sa 100% nije dobra vest za dalji rad?</summary><div class="a"><p>Zasićen eval ne može da izmeri poboljšanje. Svaka sledeća promena bi takođe pokazala 100%, bez obzira na to da li pomaže.</p></div></details>
+  <details><summary>Šta znači da je cron posao idempotentan, i zašto je to ovde bitno?</summary><div class="a"><p>Ponovljeno pokretanje daje isti rezultat. Cron se pokreće dvaput dnevno i platforme ponekad ponove posao, pa bez toga digest nastaje više puta i troši kredit.</p></div></details>
+</section>
+
+<!-- ───────────────────────────── 15 ───────────────────────────── -->
+<section class="chapter" id="recnik">
+  <div class="kicker">Poglavlje 15</div>
+  <h2>Rečnik</h2>
+  <dl class="glossary">
+    <dt>RAG</dt><dd>Retrieval-Augmented Generation: pronađi relevantne dokumente, pa ih daj modelu da napiše odgovor.</dd>
+    <dt>embedding</dt><dd>Tekst pretvoren u vektor brojeva tako da slični tekstovi imaju bliske vektore.</dd>
+    <dt>kosinusna sličnost</dt><dd>Mera koliko su dva vektora usmerena isto; 1 = isto, 0 = nepovezano.</dd>
+    <dt>pgvector / HNSW</dt><dd>Postgres dodatak za vektore i indeks za brzu približnu pretragu najbližih suseda.</dd>
+    <dt>bi-encoder / cross-encoder</dt><dd>Embedding model (odvojeno kodira) i reranker (čita pitanje i dokument zajedno).</dd>
+    <dt>top-k</dt><dd>Koliko najboljih rezultata se uzima (ovde 20/15 kandidata, 12/8 za LLM).</dd>
+    <dt>BM25 / IDF</dt><dd>Klasična keyword formula; IDF daje veću težinu retkim rečima.</dd>
+    <dt>RRF</dt><dd>Reciprocal Rank Fusion: spajanje lista po mestima, 1/(60 + mesto).</dd>
+    <dt>golden dataset</dt><dd>Pitanja sa unapred zapisanim tačnim odgovorima, za merenje.</dd>
+    <dt>hit@k, recall@k, MRR</dt><dd>Metrike retrievala; poglavlje 07.</dd>
+    <dt>precision / recall / F1</dt><dd>Udeo tačnih među prikazanim / udeo pronađenih od svih tačnih / njihov harmonijski prosek.</dd>
+    <dt>LLM-as-a-judge</dt><dd>Model kao ocenjivač; proverava se na uzorku protiv čoveka.</dd>
+    <dt>leave-one-out</dt><dd>Kod ocene jednog elementa, on sam se izuzme iz podataka (ne sme da "vidi sebe").</dd>
+    <dt>overfitting na eval</dt><dd>Podešavanje na istim pitanjima na kojima se meri; brojevi rastu, kvalitet ne.</dd>
+    <dt>structured output</dt><dd>Odgovor modela u obliku zadate JSON šeme; strict = garantovano.</dd>
+    <dt>constrained decoding</dt><dd>Generisanje uz dozvoljene samo one tokene koji poštuju šemu.</dd>
+    <dt>context budgeting</dt><dd>Svesno biranje šta i koliko ulazi u prompt.</dd>
+    <dt>kNN</dt><dd>k najbližih suseda; ovde glasaju za projekat novog captura.</dd>
+    <dt>few-shot</dt><dd>U prompt se stave primeri (ovde slični capture-i sa projektima), da model kopira obrazac.</dd>
+    <dt>cold start</dt><dd>Nema još podataka za neku klasu (novi projekat), pa metoda zasnovana na primerima ne radi.</dd>
+    <dt>idempotentnost</dt><dd>Ponovljeno izvršavanje daje isti rezultat.</dd>
+    <dt>chunking</dt><dd>Deljenje dugih dokumenata na delove sa sopstvenim embeddingom.</dd>
+    <dt>query rewriting</dt><dd>Prepisivanje follow-up pitanja ("reci mi više o tome") u samostalno pitanje pre pretrage.</dd>
+  </dl>
+</section>
+
+<!-- ───────────────────────────── 16 ───────────────────────────── -->
+<section class="chapter" id="dalje">
+  <div class="kicker">Poglavlje 16 <span class="updated">popunjava se</span></div>
+  <h2>Šta sledi</h2>
+  <div class="roadmap">
+    <div class="item"><div class="status next">sledeće</div><div><strong>Agent (LangGraph + Groq).</strong> Alati <code>semantic_search</code>, <code>list_captures</code> (filter po tipu i datumu), <code>get_capture</code> (ceo tekst), <code>create_task</code> (uz potvrdu). Guardrails: prompt-guard za injection iz transkripata, limit koraka. Eval: aggregate pitanja, sada 0%.</div></div>
+    <div class="item"><div class="status later">posle</div><div><strong>Teži eval dataset</strong> iz <code>query_log</code>, pa <strong>chunking</strong> i <strong>query rewriting</strong>, mereni na njemu.</div></div>
+    <div class="item"><div class="status later">posle</div><div><strong>Brojač AI potrošnje i mesečni limit</strong> (settings, faza 2), <strong>rate limiting po korisniku</strong>, pa <strong>demo nalog</strong> za regrutere.</div></div>
+    <div class="item"><div class="status later">kad bude $5</div><div><strong>Jev</strong> za kategorizaciju (izbor iz liste, $0,042/M tokena), meren istim evalom.</div></div>
+  </div>
+</section>
+</main>
+</div>
+
+<script>
+// Measured on 491 labelled pairs (2026-10-14): threshold → [precision %, recall %]
+const MEASURED = {
+  0.60:[48,100],0.61:[48,100],0.62:[48,100],0.63:[49,99],0.64:[49,97],0.65:[50,97],0.66:[50,96],
+  0.67:[52,94],0.68:[54,93],0.69:[58,90],0.70:[63,87],0.71:[70,82],0.72:[72,74],0.73:[77,69],
+  0.74:[82,63],0.75:[86,52],0.76:[91,46],0.77:[94,42],0.78:[100,38],0.79:[100,32],0.80:[100,28],
+  0.81:[100,23],0.82:[100,17]
+};
+const fmt = (x, d) => x.toFixed(d).replace(".", ",");
+const el = (id) => document.getElementById(id);
+function show(t) {
+  const key = Math.round(t * 100) / 100;
+  const [p, r] = MEASURED[key];
+  const f1 = (2 * p * r) / (p + r) / 100;
+  el("thv").textContent = fmt(key, 2);
+  el("pv").textContent = p + "%"; el("pm").style.width = p + "%";
+  el("rv").textContent = r + "%"; el("rm").style.width = r + "%";
+  el("fv").textContent = fmt(f1, 3); el("fm").style.width = Math.round(f1 * 100) + "%";
+  let v;
+  if (key === 0.71) v = "Najbolji balans (izabran): 7 od 10 prikazanih veza je tačno, a hvata se 82% pravih veza.";
+  else if (key < 0.70) v = `Hvata se ${r}% pravih veza, ali je tačno samo ${p}% prikazanih: graf postaje gusta mreža šuma.`;
+  else if (p === 100) v = `Sve prikazane veze su tačne, ali se propušta ${100 - r}% pravih veza: mnogi capture-i ostaju bez ijedne veze.`;
+  else v = `Precision ${p}%, recall ${r}%: F1 ${fmt(f1, 3)} (najbolji F1 je na pragu 0,71).`;
+  el("verdict").textContent = v;
+}
+el("th").addEventListener("input", (e) => show(parseFloat(e.target.value)));
+show(0.71);
+</script>
+</body>
+</html>

@@ -29,7 +29,7 @@ type GenerateOptions = {
   effort?: "low" | "medium" | "high";
 };
 
-async function complete(
+async function callOnce(
   opts: GenerateOptions,
   responseFormat?: ResponseFormat
 ): Promise<string> {
@@ -49,15 +49,44 @@ async function complete(
   return choice?.message?.content ?? "";
 }
 
+// Known ways gpt-oss on Groq fails a request that was fine, each found by the
+// categorization eval, with the reminder that fixes it on a second try:
+//   json_validate_failed: output broke the strict schema (a capture listing six
+//     links came back as an array of six objects) and Groq rejected it
+//   tool_use_failed: the model tried to call a tool even though none was given
+//     (gpt-oss was trained with built-in browsing/python tools)
+const RETRY_HINTS: Record<string, string> = {
+  json_validate_failed: "Return exactly one JSON object that matches the schema, never an array.",
+  tool_use_failed: "You have no tools. Do not call any tool; answer directly.",
+};
+
+/** One call, plus one retry with a reminder when Groq rejects a known model slip. */
+async function complete(opts: GenerateOptions, responseFormat?: ResponseFormat): Promise<string> {
+  try {
+    return await callOnce(opts, responseFormat);
+  } catch (e) {
+    const hint = RETRY_HINTS[rejectionCode(e) ?? ""];
+    if (!hint) throw e;
+    return callOnce({ ...opts, system: `${opts.system}\n\n${hint}` }, responseFormat);
+  }
+}
+
+/** The error code of a 400 from Groq (e.g. "json_validate_failed"), if any. */
+function rejectionCode(e: unknown): string | undefined {
+  if (!(e instanceof Groq.APIError) || e.status !== 400) return undefined;
+  return (e.error as { error?: { code?: string } } | undefined)?.error?.code;
+}
+
 /** Free-form text answer (chat). */
 export async function generateText(opts: GenerateOptions): Promise<string> {
   return complete(opts);
 }
 
 /**
- * Structured output: the response is guaranteed to match `schema`. Strict mode
- * uses constrained decoding, so the model cannot produce JSON that breaks the
- * schema, and there is no "parse and hope" step.
+ * Structured output: whatever comes back matches `schema`. Strict mode makes
+ * the model follow the schema, and Groq validates the result server-side.
+ * It is not a hard guarantee: Groq rejects a non-matching output with
+ * `json_validate_failed` instead of returning it, which `complete` retries once.
  *
  * Strict schemas need every property listed in `required` (use
  * `["string", "null"]` for optional fields) and `additionalProperties: false`

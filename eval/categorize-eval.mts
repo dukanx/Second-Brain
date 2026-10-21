@@ -67,9 +67,16 @@ async function neighborsOf(c: { id: string; user_id: string; embedding: string }
 type Row = { id: string; stored: { type: string; project: string }; predicted: { type: string; project: string }; combined: string };
 const rows: Row[] = [];
 
+const minutes = Math.ceil((captures.length * (PACE_MS + 1_000)) / 60_000);
+console.log(
+  `Categorizing ${captures.length} captures (${useDescriptions ? "descriptions" : "names only"}${useFewShot ? ", few-shot" : ""}), ` +
+    `~${minutes} min. Progress is printed every 10 captures.`
+);
+
 // The free tier also caps tokens per DAY; if the run dies there, report on the
 // captures done so far instead of losing them.
 let stoppedEarly = false;
+let failed = 0;
 outer: for (const [i, c] of captures!.entries()) {
   for (let attempt = 0; ; attempt++) {
     try {
@@ -89,9 +96,17 @@ outer: for (const [i, c] of captures!.entries()) {
         await sleep(60_000);
         continue;
       }
-      console.log(`  stopped at ${i}/${captures!.length}: ${e instanceof Error ? e.message : e}`);
-      stoppedEarly = true;
-      break outer;
+      if (isRateLimited(e)) {
+        console.log(`  stopped at ${i}/${captures!.length}: ${e instanceof Error ? e.message : e}`);
+        stoppedEarly = true;
+        break outer;
+      }
+      // Any other failure (e.g. schema rejected twice) is what production would
+      // answer with the default type/project: count it as a miss and go on.
+      console.log(`  capture ${i + 1} failed, counted as a miss: ${e instanceof Error ? e.message.slice(0, 120) : e}`);
+      failed++;
+      rows.push({ id: c.id.slice(0, 8), stored: { type: c.type, project: c.project }, predicted: { type: "(failed)", project: "(failed)" }, combined: "(failed)" });
+      break;
     }
   }
   if ((i + 1) % 10 === 0) console.log(`  ${i + 1}/${captures!.length}`);
@@ -99,6 +114,7 @@ outer: for (const [i, c] of captures!.entries()) {
 }
 
 if (stoppedEarly) console.log(`\nPARTIAL RUN: ${rows.length} of ${captures!.length} captures`);
+if (failed) console.log(`${failed} capture(s) failed and count as misses`);
 const pct = (n: number, d: number) => `${Math.round((100 * n) / d)}%`;
 const typeOk = rows.filter((r) => r.stored.type === r.predicted.type).length;
 const projectOk = rows.filter((r) => r.stored.project === r.predicted.project).length;

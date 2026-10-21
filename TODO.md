@@ -12,7 +12,7 @@
 **AI**
 - [x] **Structured output + novi provider** — svi AI pozivi idu kroz `lib/llm.ts` (Groq free tier, gpt-oss-120b/20b) sa strict JSON šemama (constrained decoding) umesto `JSON.parse`; enum za tip/projekat/ID-eve; digest spojen u `lib/digest.ts`; Anthropic SDK uklonjen
 - [x] **Eval kategorizacije + nova podela projekata** — nove definicije projekata (SE / AI Engineering umesto Other), 51 capture prebačen; LLM+opisi 63%, kNN 75%, u produkciji kombinacija (kNN kad se ≥3/5 suseda slaže, inače LLM) 73%. Detalji u `eval/README.md`
-- [ ] **Few-shot kategorizacija** — kod spreman: `npx tsx --env-file=.env.local eval/categorize-eval.mts --few-shot` (troši ~ceo dnevni Groq budžet za gpt-oss-20b)
+- [x] **Few-shot kategorizacija** — izmereno i odbijeno (2026-10-21): pravilo sa few-shot LLM-om 85% naprema 84% bez; razlika 1 capture, a u produkciji bi tražio drugi LLM poziv. `--few-shot` ostaje u evalu
 - [ ] **Settings stranica** — ✅ faza 1: digest on/off + dan, review podsetnici (jutro/popodne/oba/off), task podsetnici, podrazumevani tip i projekat, export, brisanje podataka (`supabase/settings-and-query-log.sql` treba pokrenuti) · faza 2 (uz structured output): praćenje AI potrošnje + mesečni limit, auto-kategorizacija/relate on/off, jezik AI odgovora · faza 3: klizač za relate prag
 - [x] **Eval skripta** — `eval/golden.json` (26 pitanja) + `eval/retrieval-eval.mjs`; hit@1/hit@3/recall@5/MRR. Prvo merenje: stari keyword iz chata hit@3 39% → vektori 96%
 - [ ] **Chunking** — dugi capture-i (transkripti) se dele na delove sa sopstvenim embeddingom (`capture_chunks` tabela) umesto sečenja na 8000 karaktera; meri eval pre/posle *(posle eval skripte)*
