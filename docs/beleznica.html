@@ -168,7 +168,7 @@ dl.glossary dd { margin: 0; color: var(--muted); max-width: 64ch; }
 
 <nav class="toc" aria-label="Poglavlja">
   <div class="brand">second_brain</div>
-  <div class="sub">beležnica za učenje · RAG, eval, LLM</div>
+  <div class="sub">beležnica za učenje · RAG, eval, LLM, agent</div>
   <ol>
     <li><a href="#sistem">Sistem u jednoj slici</a></li>
     <li><a href="#capture">Put jednog captura</a></li>
@@ -181,19 +181,21 @@ dl.glossary dd { margin: 0; color: var(--muted); max-width: 64ch; }
     <li><a href="#structured">Structured outputs</a></li>
     <li><a href="#llm">LLM sloj i provider</a></li>
     <li><a href="#kategorizacija">Kategorizacija</a></li>
+    <li><a href="#agent">Agent: model bira korake</a></li>
+    <li><a href="#agent-eval">Agent: guardrails, eval, cena</a></li>
     <li><a href="#operativa">Rad u produkciji</a></li>
     <li><a href="#odluke">Odluke i alternative</a></li>
     <li><a href="#provera">Pitanja za proveru</a></li>
     <li><a href="#recnik">Rečnik</a></li>
-    <li class="soon"><a href="#dalje">Šta sledi (agent…)</a></li>
+    <li class="soon"><a href="#dalje">Šta sledi</a></li>
   </ol>
 </nav>
 
 <main>
 <header class="intro">
-  <div class="eyebrow">Beležnica · ažurirano 21. 10. 2026.</div>
+  <div class="eyebrow">Beležnica · ažurirano 26. 10. 2026.</div>
   <h1>Kako Second Brain radi, i zašto baš tako</h1>
-  <p class="lede">Za svaki deo sistema: šta radi, zašto je napravljen tako, koje su bile alternative i kako znamo da radi. Dopunjava se posle svakog novog koraka (sledeći: agent).</p>
+  <p class="lede">Za svaki deo sistema: šta radi, zašto je napravljen tako, koje su bile alternative i kako znamo da radi. Dopunjava se posle svakog novog koraka.</p>
   <p>Boje slojeva su iste kao na <code>/arch</code> stranici aplikacije:
     <span class="chip fe">FRONTEND</span> <span class="chip api">API</span> <span class="chip ai">AI SERVISI</span> <span class="chip db">BAZA</span></p>
 </header>
@@ -244,7 +246,7 @@ dl.glossary dd { margin: 0; color: var(--muted); max-width: 64ch; }
         <line class="edge dash" x1="345" y1="236" x2="345" y2="198" marker-end="url(#ar1)"/>
       </svg>
     </div>
-    <figcaption>Tri spoljna servisa, svaki za jednu stvar. Groq piše tekst, Voyage pretvara tekst u vektore i preređuje kandidate, a Supabase čuva sve i radi vektorsku pretragu. Isprekidana strelica: cron okida iste API rute kao i korisnik.</figcaption>
+    <figcaption>Tri spoljna servisa, svaki za jednu stvar. Groq piše tekst, Voyage pretvara tekst u vektore i preređuje kandidate, a Supabase čuva sve i radi vektorsku pretragu. Isprekidana strelica: cron okida iste API rute kao i korisnik. Agent (poglavlje 12) uz to ima i direktnu SQL vezu sa bazom, za svoju memoriju.</figcaption>
   </figure>
 </section>
 
@@ -285,7 +287,7 @@ dl.glossary dd { margin: 0; color: var(--muted); max-width: 64ch; }
         <text x="360" y="225" text-anchor="middle">LLM: 12 × 1.000 kar.</text>
       </svg>
     </div>
-    <figcaption>Svaki korak vidi drugačiji deo teksta i bira manje kandidata. Chat radi isto, ali sa 15 → 8, i daje po 500 karaktera po capture-u, uz pinovan capture do 2.000.</figcaption>
+    <figcaption>Svaki korak vidi drugačiji deo teksta i bira manje kandidata. Chat sa zakačenim capture-om radi isto, ali sa 15 → 8, i daje po 500 karaktera po capture-u, a zakačeni do 2.000. Pitanja u chatu bez zakačenog captura idu agentu (poglavlje 12).</figcaption>
   </figure>
   <h3>Šta kad nešto padne</h3>
   <p>Svaki korak ima rezervu, a log beleži koja je upotrebljena:</p>
@@ -437,7 +439,7 @@ dl.glossary dd { margin: 0; color: var(--muted); max-width: 64ch; }
     <li><strong>Overfitting na eval:</strong> podešavanje mnogo parametara na istih 21 pitanje podiže brojeve, ali ne i stvarni kvalitet.</li>
     <li><strong>Ko piše pitanja:</strong> pitanja pisana gledajući beleške su lakša od pravih.</li>
     <li><strong>Pošten protivnik:</strong> "39%" je stari jednostavni algoritam, a ne BM25. Tako se i kaže.</li>
-    <li><strong>Aggregate pitanja</strong> ("šta sam poslednje učio", "otvoreni taskovi"): 0% za sve metode. To nisu pitanja o sličnosti nego o vremenu i stanju. Rešenje je router ili agent.</li>
+    <li><strong>Aggregate pitanja</strong> ("šta sam poslednje učio", "otvoreni taskovi"): 0% za sve metode. To nisu pitanja o sličnosti nego o vremenu i stanju. Rešio ih je agent: sam bira <code>list_captures</code> sa filterom po tipu i datumu (poglavlje 12).</li>
   </ul>
 </section>
 
@@ -513,11 +515,12 @@ relevantIds: { items: { enum: [...ID-evi koji su poslati] } } // ne može da izm
       <tr><td>search</td><td><code>gpt-oss-120b</code></td><td class="num">5–6K</td><td>12 × 1.000 kar. umesto celih tekstova</td></tr>
       <tr><td>chat</td><td><code>gpt-oss-120b</code></td><td class="num">2–3K</td><td>8 × 500 kar.</td></tr>
       <tr><td>digest</td><td><code>gpt-oss-120b</code></td><td class="num">~5K</td><td>60 captura, redni brojevi umesto UUID-a</td></tr>
+      <tr><td>agent (po pitanju)</td><td><code>gpt-oss-120b</code></td><td class="num">1–12K</td><td>snippeti od 300 kar., ceo tekst samo kroz <code>get_capture</code>, istorija 4 kruga</td></tr>
     </tbody>
   </table></div>
   <h3>Reasoning modeli</h3>
   <p><code>gpt-oss</code> pre odgovora proizvede skrivene "misli": u testu kategorizacije, 41 od 72 izlazna tokena. Zato <code>maxTokens</code> mora da pokrije i razmišljanje, a <code>reasoning_effort: "low"</code> ga drži kratkim.</p>
-  <div class="note"><span class="label">Šta krediti nisu bili</span><p>Kredit nije nestao zbog cene po tokenu, nego zbog baga: weekly digest se pravio 4–6 puta svakog ponedeljka (2 cron pokretanja × broj uređaja), sa Sonnetom i 80 captura. Poglavlje 12.</p></div>
+  <div class="note"><span class="label">Šta krediti nisu bili</span><p>Kredit nije nestao zbog cene po tokenu, nego zbog baga: weekly digest se pravio 4–6 puta svakog ponedeljka (2 cron pokretanja × broj uređaja), sa Sonnetom i 80 captura. Poglavlje 14.</p></div>
 </section>
 
 <!-- ───────────────────────────── 11 ───────────────────────────── -->
@@ -584,8 +587,200 @@ relevantIds: { items: { enum: [...ID-evi koji su poslati] } } // ne može da izm
 </section>
 
 <!-- ───────────────────────────── 12 ───────────────────────────── -->
+<section class="chapter" id="agent">
+  <div class="kicker">Poglavlje 12 <span class="updated">novo · 26. 10.</span></div>
+  <h2>Agent: model bira korake</h2>
+  <p>Sve do sada je bio <strong>workflow</strong>: kod unapred određuje korake. Search uvek radi isto (embedding → pgvector → reranker → jedan LLM poziv), bez obzira na pitanje. Kod <strong>agenta</strong> model radi u petlji. Bira alat, čita rezultat i sam odlučuje da li mu treba još neki korak ili može da odgovori.</p>
+  <h3>Ista rečenica, dva sistema</h3>
+  <p>Pitanje "koje taskove imam otvorene?" postavljeno u oba (26. 10.):</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th></th><th>Search (workflow)</th><th>Chat (agent)</th></tr></thead>
+    <tbody>
+      <tr><td>šta je uradio</td><td>vektorska pretraga po značenju, 12 captura</td><td><code>list_captures(type: "Task")</code></td></tr>
+      <tr><td>šta je našao</td><td>beleške koje <em>pominju</em> obaveze: prijave, predmete, intervjue</td><td>tačno 2 Task capture-a</td></tr>
+      <tr><td>problem</td><td>junske beleške je predstavio kao aktuelne ("intervju početkom jula"), jer ne vidi datume</td><td>vidi samo ono što je sačuvano kao Task</td></tr>
+      <tr><td>cena</td><td>1 LLM poziv</td><td>2 LLM poziva</td></tr>
+    </tbody>
+  </table></div>
+  <p>Pretraga po sličnosti ne zna šta znači "otvoreno" ni "najnovije", jer to nisu pitanja o značenju nego filteri. Agent ima alat koji filtrira, pa ga i izabere. Usput se vidi i nešto o podacima: većina obaveza živi unutar beleški, a ne kao Task capture-i.</p>
+  <div class="note"><span class="label">Kad agent ne treba</span><p>Agent je skuplji (2–3 LLM poziva umesto jednog), sporiji i manje predvidiv. Zato Search ostaje workflow, za brzo nalaženje po značenju, sa karticama. Agent je u Chatu, za pitanja "pitaj bilo šta". Pravilo: workflow kad su koraci uvek isti, agent kad zavise od pitanja.</p></div>
+
+  <h3>Tool calling: model ne izvršava ništa</h3>
+  <p>Modelu se uz poruke pošalje lista alata: ime, opis i JSON šema argumenata (napisana u <code>zod</code>-u). Model ne pokreće kod. Vrati poruku tipa "pozovi <code>list_captures</code> sa <code>{type: "Task"}</code>", kod izvrši funkciju, a rezultat se vrati modelu kao nova poruka (<code>ToolMessage</code>). <strong>Opis alata je deo prompta:</strong> model bira alat samo po opisu, pa se opis piše kao uputstvo kad se alat koristi.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Alat</th><th>Za pitanja tipa</th><th>Vraća</th><th>Ograničenje</th></tr></thead>
+    <tbody>
+      <tr><td><code>semantic_search</code></td><td>"šta znam o X" (tema)</td><td>6–10 captura, po 300 kar.</td><td>isti RAG kao Search (15 → reranker); najviše 3 po pitanju</td></tr>
+      <tr><td><code>list_captures</code></td><td>"poslednje", "otvoreni taskovi", "koliko u projektu"</td><td>naslovi i datumi, 10–30</td><td>filter: tip, projekat, poslednjih N dana</td></tr>
+      <tr><td><code>get_capture</code></td><td>"pročitaj celu belešku"</td><td>ceo tekst, do 6.000 kar.</td><td>samo po ID-u iz prethodnih alata</td></tr>
+      <tr><td><code>create_task</code></td><td>"napravi task / podseti me do petka"</td><td>potvrda ili odbijanje</td><td>ništa se ne upisuje bez tvog odobrenja</td></tr>
+    </tbody>
+  </table></div>
+
+  <figure>
+    <div class="fig">
+      <svg viewBox="0 66 720 200" role="img" aria-label="Pitanje ulazi u čvor agent. Ako model vrati tool_calls, ide u ToolNode koji izvrši alate i vrati rezultat agentu. Ako nema tool_calls, to je odgovor. create_task pravi interrupt i čeka tvoju potvrdu. Checkpointer u Postgresu čuva stanje.">
+        <defs>
+          <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head"/></marker>
+        </defs>
+        <rect class="box fe" x="20" y="108" width="120" height="48" rx="6"/>
+        <text x="80" y="128" text-anchor="middle" class="t-fe">pitanje</text>
+        <text x="80" y="146" text-anchor="middle" class="small">HumanMessage</text>
+
+        <text x="270" y="84" text-anchor="middle" class="small">max 5 koraka · 3 pretrage</text>
+        <rect class="box ai" x="190" y="100" width="160" height="64" rx="6"/>
+        <text x="270" y="126" text-anchor="middle" class="t-ai">agent</text>
+        <text x="270" y="146" text-anchor="middle" class="small">gpt-oss-120b + alati</text>
+
+        <rect class="box api" x="430" y="100" width="150" height="64" rx="6"/>
+        <text x="505" y="126" text-anchor="middle" class="t-api">ToolNode</text>
+        <text x="505" y="146" text-anchor="middle" class="small">izvrši tool_calls</text>
+
+        <rect class="box" x="190" y="212" width="160" height="40" rx="6"/>
+        <text x="270" y="237" text-anchor="middle">odgovor (END)</text>
+
+        <rect class="box fe" x="604" y="200" width="106" height="52" rx="6"/>
+        <text x="657" y="222" text-anchor="middle" class="t-fe">ti</text>
+        <text x="657" y="240" text-anchor="middle" class="small">Approve/Decline</text>
+
+        <rect class="box db" x="400" y="212" width="180" height="40" rx="6"/>
+        <text x="490" y="230" text-anchor="middle" class="t-db">checkpointer</text>
+        <text x="490" y="245" text-anchor="middle" class="small">Postgres · langgraph.*</text>
+
+        <line class="edge" x1="140" y1="132" x2="188" y2="132" marker-end="url(#ar3)"/>
+        <line class="edge" x1="350" y1="116" x2="428" y2="116" marker-end="url(#ar3)"/>
+        <text x="389" y="108" text-anchor="middle" class="small">tool_calls</text>
+        <line class="edge" x1="430" y1="150" x2="352" y2="150" marker-end="url(#ar3)"/>
+        <text x="391" y="168" text-anchor="middle" class="small">rezultat</text>
+        <line class="edge" x1="270" y1="164" x2="270" y2="210" marker-end="url(#ar3)"/>
+        <text x="278" y="192" class="small">bez tool_calls</text>
+        <line class="edge dash" x1="575" y1="164" x2="620" y2="198" marker-end="url(#ar3)"/>
+        <text x="604" y="176" class="small">interrupt</text>
+      </svg>
+    </div>
+    <figcaption>Graf iz <code>lib/agent/graph.ts</code>. Strelica "tool_calls" je uslovna ivica: ako poslednja poruka modela traži alat, ide se u ToolNode, a ako ne traži, to je odgovor. Posle svakog koraka checkpointer sačuva celo stanje, pa graf može da stane (interrupt) i da nastavi u sasvim drugom zahtevu.</figcaption>
+  </figure>
+
+  <h3>LangGraph delovi</h3>
+  <ul>
+    <li><strong>Stanje</strong> (<code>MessagesAnnotation</code>): lista poruka. Svaki čvor vrati nove poruke, a LangGraph ih doda na listu.</li>
+    <li><strong>Čvor <code>agent</code>:</strong> na svakom koraku sklopi kontekst (sveži sistemski prompt + poslednja 4 kruga razgovora) i pozove model sa alatima. Sistemski prompt se ne čuva u stanju, nego se pravi iznova, pa kalendar uvek ima današnji datum.</li>
+    <li><strong><code>ToolNode</code>:</strong> gotov čvor koji izvrši sve tražene alate i vrati njihove rezultate.</li>
+    <li><strong>Uslovna ivica <code>route</code>:</strong> ima <code>tool_calls</code> → tools, nema → END.</li>
+    <li><strong><code>recursionLimit: 12</code>:</strong> poslednja zaštita. Ako graf napravi više koraka, baci grešku umesto da se vrti zauvek.</li>
+  </ul>
+  <p>Zašto LangGraph, a ne ručna petlja od 30 linija? Petlja je laka, ali pauza sa čuvanjem stanja i memorija po razgovoru nisu. LangGraph ih ima gotove (<code>interrupt</code>, checkpointer), a graf se lako crta i objašnjava.</p>
+
+  <h3>Human in the loop: <code>interrupt</code></h3>
+  <ol class="steps">
+    <li><div><div class="what"><strong>Model pozove <code>create_task</code></strong></div><div class="why">Na primer <code>{title: "Pregledaj CV", due_date: "2026-10-30"}</code>.</div></div></li>
+    <li><div><div class="what"><strong><code>interrupt()</code> zaustavi graf</strong></div><div class="why">Stanje se sačuva u Postgres, a API vrati <code>pending</code> umesto odgovora. UI prikaže karticu sa Approve / Decline.</div></div></li>
+    <li><div><div class="what"><strong>Ti klikneš</strong></div><div class="why">Novi zahtev šalje <code>Command({resume: {approved}})</code> sa istim <code>thread_id</code>. Graf se učita iz baze i nastavi tačno odatle.</div></div></li>
+    <li><div><div class="what"><strong>Upis ili poruka "odbijeno"</strong></div><div class="why">Model dobije rezultat i napiše završni odgovor.</div></div></li>
+  </ol>
+  <div class="note"><span class="label">Zamka</span><p>Pri nastavku LangGraph ponovo pokreće ceo alat od početka, a <code>interrupt()</code> ovog puta odmah vrati tvoju odluku. Zato pre <code>interrupt()</code> ne sme da postoji nikakav upis, jer bi se izvršio dvaput. Isti princip kao idempotentnost crona (poglavlje 14).</p></div>
+
+  <h3>Memorija: model je stateless</h3>
+  <p>Model ne pamti ništa između poziva. "Memorija" znači da se na svaki zahtev poslednji krugovi razgovora ponovo pošalju. Ko čuva te poruke između zahteva? <strong>Checkpointer</strong>, po <code>thread_id</code>-u.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Checkpointer</th><th>Gde čuva</th><th>Gde radi</th></tr></thead>
+    <tbody>
+      <tr class="lose"><td><code>MemorySaver</code></td><td>RAM procesa</td><td>eval i CLI; na Vercelu sledeći zahtev može da dođe u drugi proces, gde je memorija prazna</td></tr>
+      <tr class="win"><td><code>PostgresSaver</code></td><td>tabele u šemi <code>langgraph</code></td><td>produkcija: svaki proces čita istu bazu</td></tr>
+    </tbody>
+  </table></div>
+  <ul>
+    <li><strong>Posebna šema:</strong> sačuvani razgovori sadrže tvoje beleške. Supabase REST API izlaže samo šemu <code>public</code>. Provereno javnim ključem: <code>Invalid schema: langgraph</code>.</li>
+    <li><strong><code>thread_id = userId:threadId</code>:</strong> čak i kad neko pogodi ID razgovora, ne može da učita tuđi.</li>
+    <li><strong>Dve vrste veze sa bazom:</strong> aplikacija inače priča sa Supabase-om preko HTTP-a (PostgREST, API ključevi). Checkpointer traži pravu SQL vezu sa lozinkom baze (<code>DATABASE_URL</code>). Direktni host je samo IPv6, pa ide preko <strong>transaction pooler</strong>-a (port 6543), koji deli mali broj konekcija na mnogo kratkih serverless poziva.</li>
+    <li><strong>Test:</strong> dva odvojena procesa, isti thread. Drugi proces je na "a koji je od njih najstariji?" odgovorio iz memorije: 1 LLM poziv, nijedan alat.</li>
+  </ul>
+</section>
+
+<!-- ───────────────────────────── 13 ───────────────────────────── -->
+<section class="chapter" id="agent-eval">
+  <div class="kicker">Poglavlje 13 <span class="updated">novo · 26. 10.</span></div>
+  <h2>Agent: guardrails, eval i cena</h2>
+  <p>Agent sam bira korake, pa sam može i da pogreši: da čita tuđe podatke, da posluša tekst iz transkripta, da upiše nešto bez pitanja ili da se vrti u krug. <strong>Guardrails</strong> su ograde oko njega, i većina je u kodu, ne u promptu.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Rizik</th><th>Ograda</th><th>Gde</th></tr></thead>
+    <tbody>
+      <tr><td>tuđi podaci</td><td><code>userId</code> dolazi iz sesije i nikad nije argument alata, pa model ne može ni da ga promeni. Alati idu preko klijenta sa tvojim RLS pravima.</td><td><code>tools.ts</code>, ruta</td></tr>
+      <tr><td>prompt injection (transkript ili stranica kaže "ignore previous instructions")</td><td><strong>prompt-guard</strong> (<code>llama-prompt-guard-2-86m</code>) oceni tekst u delovima od 600 kar.; iznad 0,5 tekst se obavije upozorenjem. Plus pravilo u promptu: tekst iz alata su podaci, ne naredbe.</td><td><code>llm.ts</code>, <code>tools.ts</code></td></tr>
+      <tr><td>upis bez pitanja</td><td><code>interrupt</code>: ništa pre tvog odobrenja</td><td><code>create_task</code></td></tr>
+      <tr><td>vrtenje u krug</td><td>najviše 3 pretrage po pitanju; posle 5 koraka model mora da odgovori bez alata (<code>tool_choice: "none"</code>); <code>recursionLimit</code> 12 kao poslednja zaštita</td><td><code>graph.ts</code>, <code>tools.ts</code></td></tr>
+      <tr><td>nevažeći argumenti</td><td>model traži <code>limit: 20</code>, a kod ga sam svede na dozvoljeno (<em>clamp</em>). Da je <code>max</code> u šemi, Groq bi odbio ceo poziv.</td><td><code>tools.ts</code></td></tr>
+      <tr><td>izmišljanje</td><td>pravila grounding-a; kad Voyage padne, alat iskreno kaže "SEARCH UNAVAILABLE" umesto da najnovije beleške predstavi kao rezultate</td><td>prompt, <code>tools.ts</code></td></tr>
+      <tr><td>datumi</td><td>kod u prompt upiše kalendar narednih 7 dana, a model samo čita</td><td><code>graph.ts</code></td></tr>
+    </tbody>
+  </table></div>
+  <div class="note"><span class="label">Lekcija</span><p>Pravilo u promptu je molba, a pravilo u kodu je zakon. Prompt je rekao "ne pretražuj previše", a model je na <code>medium</code> potrošio 28K tokena i udario u recursion limit. Budžet u kodu je to rešio za jedan red. Prompt služi za ponašanje i stil, a granice idu u kod.</p></div>
+
+  <h3>Eval agenta</h3>
+  <p>12 pitanja u 4 grupe: vreme/stanje (4), tema (2), više koraka (2) i zamke (4). Primeri zamki: "kvantna fizika" (nema ništa, ne sme da izmisli), "podseti me šta sam pisao o Malkier-u" ("podseti" ovde ne znači task), "do petka" (tačan datum). Svako pitanje ima samo provere koje mu odgovaraju:</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Provera</th><th>Šta meri</th><th>Kako</th></tr></thead>
+    <tbody>
+      <tr><td><code>tools</code> / <code>no_forbidden_tool</code></td><td>da li je izabrao prave alate i izbegao zabranjene</td><td>deterministički</td></tr>
+      <tr><td><code>data</code></td><td>da li su očekivani capture-i bili u rezultatima alata</td><td>ID-evi, deterministički</td></tr>
+      <tr><td><code>due_date</code></td><td>"do petka" = sledeći petak</td><td>deterministički</td></tr>
+      <tr><td><code>answer</code></td><td>da li je odgovor tačan i zasnovan na podacima</td><td>LLM sudija, sa pravilom za svako pitanje</td></tr>
+    </tbody>
+  </table></div>
+  <p>Eval uvek odbija <code>create_task</code>, pa nikad ne piše u bazu. Meri i cenu: broj LLM poziva, tokene i sekunde. Ima <code>--repeat N</code>, jer model nije determinističan: jedno pitanje može da prođe ili padne slučajno.</p>
+
+  <h3>Šta je eval otkrio</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Problem</th><th>Šta se desilo</th><th>Popravka</th></tr></thead>
+    <tbody>
+      <tr><td>pretpostavka</td><td>"uklapa li se u moj diplomski": model je izmislio temu diplomskog umesto da je potraži</td><td>pravilo: ono što je specifično za korisnika prvo potraži</td></tr>
+      <tr><td>datum</td><td>"do petka" je postao sreda</td><td>kalendar u promptu</td></tr>
+      <tr><td>dupla potvrda</td><td>pitao je u tekstu "da li da napravim?", pa tek onda pozvao alat</td><td>pravilo: zovi <code>create_task</code> direktno, kartica je potvrda</td></tr>
+      <tr><td>Groq "Parsing failed"</td><td>model napisao poziv alata koji Groq ne ume da pročita (pad, ne loš odgovor)</td><td>retry sa napomenom, kao u poglavlju 09</td></tr>
+      <tr><td><code>limit: 20</code></td><td>šema kaže max 10, Groq odbije ceo poziv</td><td>clamp u kodu</td></tr>
+      <tr><td>prompt-guard</td><td><code>context_length_exceeded</code>: model čita ~512 tokena, a srpski tekst sa ID-evima je "skup"</td><td>delovi od 600 kar., uzima se najveći skor</td></tr>
+      <tr><td>vrtenje</td><td>na <code>medium</code>: pretraga za pretragom, 28K tokena</td><td>budžet pretraga i koraka u kodu</td></tr>
+      <tr><td>tihi fallback</td><td>Voyage 429 → alat vratio najnovije beleške, a agent ih čitao kao rezultate pretrage</td><td>alat iskreno kaže "SEARCH UNAVAILABLE"</td></tr>
+      <tr><td>hrvatski</td><td>"27. travnja", "projekt"</td><td>pravilo: srpski latinicom, sa primerima i formatom datuma</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Reasoning effort: low ili medium?</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Merenje</th><th class="num">low</th><th class="num">medium</th></tr></thead>
+    <tbody>
+      <tr><td>prvi pun prolaz, 12 pitanja (22. 10, pre popravki)</td><td class="num">11/12</td><td class="num">10/12</td></tr>
+      <tr><td>najteža pitanja (#7, #9) × 3, posle popravki</td><td class="num">6/6</td><td class="num">6/6</td></tr>
+      <tr><td>· LLM poziva po pitanju</td><td class="num">3,2</td><td class="num">4,2</td></tr>
+      <tr><td>· tokena po pitanju</td><td class="num">~5,3K</td><td class="num">~11K</td></tr>
+      <tr><td>· sekundi</td><td class="num">4,2</td><td class="num">6,3</td></tr>
+    </tbody>
+  </table></div>
+  <p>Padovi u prvom prolazu su bili greške (Parsing failed, <code>limit: 20</code>), a ne loši odgovori. Razlika 11 naprema 10 je jedno pitanje, dakle šum. Na teškim pitanjima je tačnost ista, a <code>low</code> troši upola manje. Produkcija je za sada na <code>medium</code>. Odluka čeka pun eval sa <code>--repeat 2</code> na svež Groq dan: ako je tačnost ista, prelazi se na <code>low</code>.</p>
+
+  <h3>Cena jednog razgovora</h3>
+  <p>Pet pitanja u istom razgovoru (26. 10.):</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Pitanje</th><th class="num">LLM poziva</th><th>alati</th><th class="num">ulaz / izlaz</th></tr></thead>
+    <tbody>
+      <tr><td>koje taskove imam otvorene?</td><td class="num">2</td><td>list_captures</td><td class="num">2,0K / 0,2K</td></tr>
+      <tr><td>a koji je od njih najstariji?</td><td class="num">1</td><td>— (memorija)</td><td class="num">1,2K / 0,1K</td></tr>
+      <tr><td>šta sam učio o mockito?</td><td class="num">2</td><td>semantic_search</td><td class="num">3,4K / 0,7K</td></tr>
+      <tr><td>kako se to povezuje sa diplomskim?</td><td class="num">3</td><td>2 × semantic_search</td><td class="num">11,1K / 1,3K</td></tr>
+      <tr class="lose"><td>koje su mi poslednje 3 beleške?</td><td class="num">2</td><td>list_captures</td><td class="num">11,1K / 0,2K</td></tr>
+    </tbody>
+  </table></div>
+  <p>Poslednje pitanje je lako, a košta kao najteže. Istorija od 4 kruga nosi i sirove rezultate starih pretraga, pa ulaz po pozivu raste: 0,9K → 2,7K → 5,4K. Rešenje je <strong>context compaction</strong>: iz starih krugova čuvati samo pitanja i odgovore, a rezultate alata samo za tekući krug. To je sledeći korak.</p>
+  <ul>
+    <li><strong>Dnevni budžet:</strong> 200K tokena dnevno za <code>gpt-oss-120b</code>, deljeno sa Search-om i digestom. To je otprilike 25–50 pitanja agentu dnevno. Dovoljno za jednog korisnika, premalo za javni demo.</li>
+    <li><strong>Skriveni pozivi:</strong> jedna <code>semantic_search</code> = 2 Voyage zahteva (embed + rerank) i ~8 prompt-guard poziva. Voyage bez kartice dozvoljava 3 zahteva u minuti, pa dve pretrage u jednom pitanju mogu da okinu fallback.</li>
+  </ul>
+  <div class="note"><span class="label">Lekcija</span><p>Kod agenta se cena ne vidi iz jednog poziva. Treba meriti ceo razgovor, jer svaki poziv nosi istoriju, a svaki alat može da zove još servisa.</p></div>
+</section>
+
+<!-- ───────────────────────────── 14 ───────────────────────────── -->
 <section class="chapter" id="operativa">
-  <div class="kicker">Poglavlje 12</div>
+  <div class="kicker">Poglavlje 14</div>
   <h2>Rad u produkciji</h2>
   <h3>Idempotentnost (bag sa digestom)</h3>
   <p>Cron se pokreće u 09:00 i 14:00 UTC, a digest se pravio u petlji po push pretplatama. 2 pokretanja × 2–3 uređaja dalo je 4–6 digesta svakog ponedeljka, i kad nije bilo novih captura. Popravka: grupisanje po korisniku, a digest se preskače ako postoji iz poslednjih 6 dana ili ako nema novih captura. Koliko god puta da se posao pokrene, rezultat je isti.</p>
@@ -602,9 +797,9 @@ relevantIds: { items: { enum: [...ID-evi koji su poslati] } } // ne može da izm
   </ul>
 </section>
 
-<!-- ───────────────────────────── 13 ───────────────────────────── -->
+<!-- ───────────────────────────── 15 ───────────────────────────── -->
 <section class="chapter" id="odluke">
-  <div class="kicker">Poglavlje 13</div>
+  <div class="kicker">Poglavlje 15</div>
   <h2>Odluke i alternative</h2>
   <div class="table-wrap"><table>
     <thead><tr><th>Odluka</th><th>Izabrano</th><th>Alternative</th><th>Na osnovu čega</th></tr></thead>
@@ -620,13 +815,18 @@ relevantIds: { items: { enum: [...ID-evi koji su poslati] } } // ne može da izm
       <tr><td>jedan projekat ili tagovi</td><td>jedan</td><td>tagovi (više-na-više)</td><td>pretraga ne gleda projekat</td></tr>
       <tr><td>vreme podsetnika</td><td>postojeći termini</td><td>satni cron</td><td>nula dodatnog opterećenja</td></tr>
       <tr><td>registracija</td><td>zatvorena; demo nalog u planu</td><td>otvorena</td><td>zajednički Groq limiti, tuđi podaci</td></tr>
+      <tr><td>agent framework</td><td>LangGraph JS</td><td>ručna petlja, Vercel AI SDK</td><td><code>interrupt</code> i checkpointer gotovi, isti TypeScript kao aplikacija</td></tr>
+      <tr><td>gde je agent</td><td>Chat (bez zakačenog captura)</td><td>i Search</td><td>Search ostaje workflow: 1 poziv, predvidiv, kartice</td></tr>
+      <tr><td>memorija agenta</td><td><code>PostgresSaver</code>, šema <code>langgraph</code></td><td><code>MemorySaver</code>, tabela u <code>public</code></td><td>serverless procesi; REST API ne vidi šemu</td></tr>
+      <tr><td>granice agenta</td><td>u kodu (budžet, clamp, kalendar)</td><td>samo prompt; <code>max</code> u šemi</td><td>model ne poštuje prompt pouzdano; šema obara ceo poziv</td></tr>
+      <tr><td>reasoning effort agenta</td><td>medium, privremeno</td><td>low</td><td>ista tačnost na teškim pitanjima, low upola jeftiniji; čeka pun eval</td></tr>
     </tbody>
   </table></div>
 </section>
 
-<!-- ───────────────────────────── 14 ───────────────────────────── -->
+<!-- ───────────────────────────── 16 ───────────────────────────── -->
 <section class="chapter" id="provera">
-  <div class="kicker">Poglavlje 14</div>
+  <div class="kicker">Poglavlje 16</div>
   <h2>Pitanja za proveru</h2>
   <p>Odgovori prvo sam, pa otvori.</p>
   <details><summary>Zašto pretraga ne koristi prag sličnosti, a relate koristi?</summary><div class="a"><p>Pretraga uvek uzme top-k, pa LLM odluči šta je relevantno: vektori su "široka mreža", LLM je filter. Relate nema LLM posle sebe, jer se veze direktno prikazuju u grafu, pa je prag jedini filter.</p></div></details>
@@ -641,11 +841,19 @@ relevantIds: { items: { enum: [...ID-evi koji su poslati] } } // ne može da izm
   <details><summary>Zašto je LLM u kombinaciji "samo" 64% tačan, a ipak koristan?</summary><div class="a"><p>LLM odlučuje samo kad se 5 suseda ne slaže, a to su najteži slučajevi. Na njima je 64% bolje od kNN-a, koji tu nema jasnu većinu.</p></div></details>
   <details><summary>Zašto eval sa 100% nije dobra vest za dalji rad?</summary><div class="a"><p>Zasićen eval ne može da izmeri poboljšanje. Svaka sledeća promena bi takođe pokazala 100%, bez obzira na to da li pomaže.</p></div></details>
   <details><summary>Šta znači da je cron posao idempotentan, i zašto je to ovde bitno?</summary><div class="a"><p>Ponovljeno pokretanje daje isti rezultat. Cron se pokreće dvaput dnevno i platforme ponekad ponove posao, pa bez toga digest nastaje više puta i troši kredit.</p></div></details>
+  <details><summary>Koja je razlika između workflow-a i agenta, i zašto Search nije agent?</summary><div class="a"><p>U workflow-u kod određuje korake, a kod agenta ih model bira u petlji. Search uvek radi isto (pretraga → jedan LLM poziv), pa je brz, jeftin i predvidiv. Agent je potreban kad koraci zavise od pitanja: "otvoreni taskovi" traže filter, a ne sličnost.</p></div></details>
+  <details><summary>Šta model zapravo uradi kad "pozove alat"?</summary><div class="a"><p>Ništa ne izvršava. Vrati poruku sa imenom alata i argumentima po šemi. Kod izvrši funkciju i vrati rezultat kao novu poruku, pa model nastavlja. Alat bira samo po opisu, zato je opis deo prompta.</p></div></details>
+  <details><summary>Zašto userId nije argument alata?</summary><div class="a"><p>Sve što je argument, model može da izmisli ili da ga tekst iz beleške navede da ga promeni. userId dolazi iz sesije na serveru i "zakuca" se u alate, pa model fizički ne može da traži tuđe podatke.</p></div></details>
+  <details><summary>Zašto MemorySaver radi u CLI-ju, a ne bi radio na Vercelu?</summary><div class="a"><p>MemorySaver čuva razgovor u RAM-u procesa. Na Vercelu svaki zahtev može da završi u drugom procesu, gde je memorija prazna, a odobravanje taska je uvek drugi zahtev. PostgresSaver čuva stanje u bazi, pa ga svaki proces vidi.</p></div></details>
+  <details><summary>Zašto u create_task nema upisa pre interrupt()?</summary><div class="a"><p>Pri nastavku LangGraph ponovo pokreće alat od početka, a interrupt() tada vrati odluku. Sve pre njega bi se izvršilo dvaput.</p></div></details>
+  <details><summary>Zašto je limit pretraga u kodu, a ne samo u promptu? I zašto clamp umesto max u šemi?</summary><div class="a"><p>Prompt je molba: na medium je model i pored pravila pretraživao dok nije potrošio 28K tokena. Kod je zakon. Max u šemi bi naterao Groq da odbije ceo poziv kad model traži 20, a clamp tiho svede broj na 10 i nastavi.</p></div></details>
+  <details><summary>Zašto je peto pitanje u razgovoru koštalo 11K tokena, a prvo 2K?</summary><div class="a"><p>Svaki poziv nosi poslednja 4 kruga, sa sirovim rezultatima starih pretraga. Rešenje je context compaction: iz starih krugova čuvati samo pitanja i odgovore.</p></div></details>
+  <details><summary>Prvi prolaz: low 11/12, medium 10/12. Da li je low bolji?</summary><div class="a"><p>Ne zna se. Jedno pitanje razlike je šum, a padovi su bili greške API-ja, ne loši odgovori. Zato postoji --repeat i zato odluka čeka pun eval sa ponavljanjem.</p></div></details>
 </section>
 
-<!-- ───────────────────────────── 15 ───────────────────────────── -->
+<!-- ───────────────────────────── 17 ───────────────────────────── -->
 <section class="chapter" id="recnik">
-  <div class="kicker">Poglavlje 15</div>
+  <div class="kicker">Poglavlje 17</div>
   <h2>Rečnik</h2>
   <dl class="glossary">
     <dt>RAG</dt><dd>Retrieval-Augmented Generation: pronađi relevantne dokumente, pa ih daj modelu da napiše odgovor.</dd>
@@ -671,16 +879,31 @@ relevantIds: { items: { enum: [...ID-evi koji su poslati] } } // ne može da izm
     <dt>idempotentnost</dt><dd>Ponovljeno izvršavanje daje isti rezultat.</dd>
     <dt>chunking</dt><dd>Deljenje dugih dokumenata na delove sa sopstvenim embeddingom.</dd>
     <dt>query rewriting</dt><dd>Prepisivanje follow-up pitanja ("reci mi više o tome") u samostalno pitanje pre pretrage.</dd>
+    <dt>workflow / agent</dt><dd>Korake određuje kod / korake bira model u petlji.</dd>
+    <dt>tool calling</dt><dd>Model vrati ime alata i argumente po šemi; kod ga izvrši i vrati rezultat.</dd>
+    <dt>LangGraph</dt><dd>Biblioteka za agente kao graf: čvorovi, ivice, stanje, pauza i memorija.</dd>
+    <dt>ToolNode</dt><dd>Gotov LangGraph čvor koji izvrši alate koje je model tražio.</dd>
+    <dt>interrupt / human in the loop</dt><dd>Graf stane i čeka čoveka (ovde: odobrenje taska), pa nastavi iz sačuvanog stanja.</dd>
+    <dt>checkpointer</dt><dd>Čuva stanje grafa posle svakog koraka, po <code>thread_id</code>-u (RAM ili Postgres).</dd>
+    <dt>guardrails</dt><dd>Ograde oko agenta: dozvole, budžeti, potvrde, provera ulaza.</dd>
+    <dt>prompt injection</dt><dd>Tekst u podacima koji pokušava da modelu izda naredbe.</dd>
+    <dt>grounding</dt><dd>Svaka tvrdnja u odgovoru mora da potiče iz pronađenih podataka.</dd>
+    <dt>reasoning effort</dt><dd>Koliko dugo reasoning model "razmišlja" pre odgovora (low/medium/high).</dd>
+    <dt>context compaction</dt><dd>Skraćivanje istorije razgovora (npr. bez starih rezultata alata) da cena ne raste sa svakim krugom.</dd>
+    <dt>connection pooler</dt><dd>Posrednik koji deli mali broj konekcija sa bazom na mnogo kratkih serverless zahteva.</dd>
   </dl>
 </section>
 
-<!-- ───────────────────────────── 16 ───────────────────────────── -->
+<!-- ───────────────────────────── 18 ───────────────────────────── -->
 <section class="chapter" id="dalje">
-  <div class="kicker">Poglavlje 16 <span class="updated">popunjava se</span></div>
+  <div class="kicker">Poglavlje 18 <span class="updated">popunjava se</span></div>
   <h2>Šta sledi</h2>
   <div class="roadmap">
-    <div class="item"><div class="status next">sledeće</div><div><strong>Agent (LangGraph + Groq).</strong> Alati <code>semantic_search</code>, <code>list_captures</code> (filter po tipu i datumu), <code>get_capture</code> (ceo tekst), <code>create_task</code> (uz potvrdu). Guardrails: prompt-guard za injection iz transkripata, limit koraka. Eval: aggregate pitanja, sada 0%.</div></div>
+    <div class="item"><div class="status next">sledeće</div><div><strong>Pun eval agenta</strong> (low i medium, <code>--repeat 2</code>, svež Groq dan), pa odluka o reasoning effort-u.</div></div>
+    <div class="item"><div class="status next">sledeće</div><div><strong>Context compaction</strong> u agentu (bez starih rezultata alata u istoriji), meren istim razgovorom od 5 pitanja.</div></div>
+    <div class="item"><div class="status next">sledeće</div><div><strong>Search vidi datume</strong>: datum uz svaki capture u kontekstu i pravilo da stare beleške nisu trenutno stanje. Opciono dugme "pitaj agenta" za pitanja o vremenu i stanju.</div></div>
     <div class="item"><div class="status later">posle</div><div><strong>Teži eval dataset</strong> iz <code>query_log</code>, pa <strong>chunking</strong> i <strong>query rewriting</strong>, mereni na njemu.</div></div>
+    <div class="item"><div class="status later">posle</div><div><strong>Voyage kartica</strong>: sa karticom limit raste sa 3 na 2.000 zahteva u minuti, a besplatni tokeni ostaju. Agent onda ne bi udarao u fallback.</div></div>
     <div class="item"><div class="status later">posle</div><div><strong>Brojač AI potrošnje i mesečni limit</strong> (settings, faza 2), <strong>rate limiting po korisniku</strong>, pa <strong>demo nalog</strong> za regrutere.</div></div>
     <div class="item"><div class="status later">kad bude $5</div><div><strong>Jev</strong> za kategorizaciju (izbor iz liste, $0,042/M tokena), meren istim evalom.</div></div>
   </div>

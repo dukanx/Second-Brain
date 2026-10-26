@@ -35,3 +35,6 @@ next-env.d.ts
 
 # local data backups (personal data, never commit)
 backups/
+
+# agent eval questions and judge rules describe personal notes
+eval/agent-golden.json

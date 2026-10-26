@@ -10,6 +10,7 @@ A personal AI-powered knowledge capture and synthesis tool. Built for daily use 
 - **Supabase** — Postgres database + Google OAuth
 - **Groq** (free tier) — `gpt-oss-120b` / `gpt-oss-20b` for all AI features via a provider-agnostic layer (`lib/llm.ts`) with strict structured outputs; `whisper-large-v3` for audio transcription
 - **Voyage AI** — `voyage-3.5-lite` embeddings + `rerank-2.5` reranker for RAG (pgvector); see [`eval/`](eval/) for the retrieval eval
+- **LangGraph JS** — tool-calling agent in the Chat tab, with human-in-the-loop approval and Postgres-backed memory
 - **Tailwind CSS** — terminal aesthetic (JetBrains Mono, dark theme)
 - **Vercel** — hosting + cron jobs
 
@@ -28,11 +29,18 @@ A personal AI-powered knowledge capture and synthesis tool. Built for daily use 
 
 ### Search & Discovery (RAG)
 - **Search tab** — the query is embedded, pgvector returns the 20 most similar captures, a Voyage reranker keeps the best 12, and the LLM synthesizes an answer with follow-up questions
-- **Chat tab** — same retrieval (15 candidates → rerank → 8) for every message; a pinned capture can be discussed directly
+- **Chat tab** — a **LangGraph agent** (below); with a pinned capture, plain RAG chat about that capture (15 candidates → rerank → 8)
 - **Relations** — captures are linked when cosine similarity ≥ 0.71 (threshold picked by F1 on 491 labelled pairs), batch rebuild from the Graph tab
 - **⌘K** instant search overlay — client-side, multi-word AND matching
 - **Knowledge Graph** — force-directed canvas graph, pan/zoom, filter by type/project
 - Every search/chat query is logged with what was retrieved and whether a fallback kicked in (`query_log`)
+
+### Agent (Chat tab)
+- `gpt-oss-120b` decides which tools to call, in a loop: `semantic_search` (same RAG as Search), `list_captures` (filter by type, project, last N days), `get_capture` (full text), `create_task`
+- **Human in the loop:** `create_task` pauses the graph (`interrupt`); the UI shows Approve / Decline and nothing is written before you approve
+- **Memory:** conversation state is checkpointed in Postgres (`PostgresSaver`, schema `langgraph`, not exposed by the REST API), keyed by `userId:threadId`; the model sees the last 4 turns
+- **Guardrails:** `userId` comes from the session and is never a tool argument; tool output is checked by Groq's prompt-guard model; at most 3 searches and 5 steps per question (then a forced answer); tool limits are clamped in code; dates come from a calendar the code writes into the prompt
+- Evaluated with 12 questions (tool choice, retrieved data, exact due date, LLM judge, cost); see [`eval/`](eval/)
 
 ### Growth
 - **Activity heatmap** — year view (52 weeks) and month view with navigation
@@ -154,6 +162,7 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 GROQ_API_KEY=
 VOYAGE_API_KEY=
+DATABASE_URL=   # Supabase → Connect → Transaction pooler (agent memory)
 NEXT_PUBLIC_VAPID_PUBLIC_KEY=
 VAPID_PRIVATE_KEY=
 VAPID_EMAIL=
@@ -170,7 +179,8 @@ CRON_SECRET=
 | `/api/relate` | POST | Link one capture to similar ones (vector similarity) |
 | `/api/relate/batch` | POST | Rebuild all relations (Graph tab) |
 | `/api/search` | POST | RAG search: vector → rerank → LLM synthesis |
-| `/api/chat` | POST | RAG chat: vector → rerank → LLM answer |
+| `/api/chat` | POST | RAG chat about a pinned capture: vector → rerank → LLM answer |
+| `/api/agent` | POST | Agent turn (`{threadId, message}`) or approval (`{threadId, resume}`) |
 | `/api/transcribe` | POST | Audio file → Groq Whisper → transcript |
 | `/api/projects` | GET / POST | List projects / create new project |
 | `/api/digest` | GET / POST | Fetch history / generate digest |
@@ -193,12 +203,14 @@ All AI calls go through `lib/llm.ts`. Groq's free tier allows 8K tokens/minute a
 | Chat message | gpt-oss-120b | 2–3K |
 | Digest | gpt-oss-120b | ~5K (60 captures, numbered instead of UUIDs) |
 | Weekly summary | gpt-oss-120b | 1–3K |
+| Agent question | gpt-oss-120b | 1–12K over 1–3 calls (grows with conversation history) |
 
 ## Local Development
 
 ```bash
 npm install
 # add .env.local with the variables above
+npx tsx --env-file=.env.local scripts/setup-agent-db.mts   # once: agent memory tables
 npm run dev
 ```
 

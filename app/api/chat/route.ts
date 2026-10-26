@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { embedOne, rerank } from "@/lib/embeddings";
-import { logQuery, type RetrievalFallback } from "@/lib/queryLog";
+import { logQuery } from "@/lib/queryLog";
+import { retrieveCaptures } from "@/lib/retrieval";
 import { generateText, isRateLimited } from "@/lib/llm";
 
 // How many captures to retrieve as context for each chat message.
@@ -16,7 +16,6 @@ const CONTEXT_CHARS = 500;
 
 type Message = { role: "user" | "assistant"; content: string };
 type ContextCapture = { title: string; text: string; type: string; project: string };
-type RetrievedCapture = ContextCapture & { id: string };
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -29,40 +28,15 @@ export async function POST(request: Request) {
     pinnedCapture?: (ContextCapture & { id: string }) | null;
   };
 
-  // RAG retrieval: embed the message and pull the most similar captures via
-  // pgvector. Only the current message is embedded, so a vague follow-up
-  // ("tell me more") retrieves poorly; the pinned capture covers the common case.
-  let context: RetrievedCapture[] = [];
-  let fallback: RetrievalFallback = null;
-  try {
-    const queryEmbedding = await embedOne(message, "query");
-    const { data: matches, error } = await supabase.rpc("match_captures", {
-      query_embedding: queryEmbedding,
-      match_count: RERANK_CANDIDATES,
-      p_user_id: user.id,
-      exclude_id: pinnedCapture?.id ?? null,
-    });
-    if (error) throw error;
-    const candidates = (matches as RetrievedCapture[]) ?? [];
-    try {
-      context = await rerank(message, candidates, CONTEXT_COUNT);
-    } catch (e) {
-      // Reranker down or rate limited: keep the vector order.
-      console.error("chat: rerank failed, using vector order:", e);
-      fallback = "rerank";
-      context = candidates.slice(0, CONTEXT_COUNT);
-    }
-  } catch (e) {
-    console.error("chat: vector retrieval failed, falling back to recent captures:", e);
-    fallback = "vector";
-    const { data: recent } = await supabase
-      .from("captures")
-      .select("id, title, text, type, project")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(CONTEXT_COUNT);
-    context = recent ?? [];
-  }
+  // RAG retrieval for the current message. Only this message is embedded, so a
+  // vague follow-up ("tell me more") retrieves poorly; the pinned capture covers
+  // the common case.
+  const { captures: context, fallback } = await retrieveCaptures(supabase, user.id, message, {
+    candidates: RERANK_CANDIDATES,
+    keep: CONTEXT_COUNT,
+    excludeId: pinnedCapture?.id ?? null,
+    label: "chat",
+  });
 
   await logQuery(supabase, {
     userId: user.id,

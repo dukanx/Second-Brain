@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { embedOne, rerank } from "@/lib/embeddings";
-import { logQuery, type RetrievalFallback } from "@/lib/queryLog";
+import { logQuery } from "@/lib/queryLog";
+import { retrieveCaptures } from "@/lib/retrieval";
 import { generateObject, isRateLimited } from "@/lib/llm";
 
 // How many captures to retrieve and feed into the synthesis. Keeping this small
@@ -12,15 +12,6 @@ const RERANK_CANDIDATES = 20;
 // Per-capture text sent to the LLM. 12 × 1000 chars ≈ 4K tokens, which leaves
 // room for the answer inside Groq's 8K tokens/minute limit.
 const CONTEXT_CHARS = 1000;
-
-type RetrievedCapture = {
-  id: string;
-  title: string;
-  text: string;
-  type: string;
-  project: string;
-  created_at: string;
-};
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -33,40 +24,12 @@ export async function POST(request: Request) {
   const { query } = await request.json();
   if (!query?.trim()) return NextResponse.json({ error: "Empty query" }, { status: 400 });
 
-  // RAG retrieval: embed the query and pull only the most semantically similar
-  // captures via pgvector, instead of sending the entire knowledge base.
-  let captures: RetrievedCapture[] = [];
-  let fallback: RetrievalFallback = null;
-  try {
-    const queryEmbedding = await embedOne(query, "query");
-    const { data: matches, error: matchError } = await supabase.rpc("match_captures", {
-      query_embedding: queryEmbedding,
-      match_count: RERANK_CANDIDATES,
-      p_user_id: user.id,
-    });
-    if (matchError) throw matchError;
-    const candidates = (matches as RetrievedCapture[]) ?? [];
-    try {
-      captures = await rerank(query, candidates, RETRIEVE_COUNT);
-    } catch (e) {
-      // Reranker down or rate limited: keep the vector order.
-      console.error("search: rerank failed, using vector order:", e);
-      fallback = "rerank";
-      captures = candidates.slice(0, RETRIEVE_COUNT);
-    }
-  } catch (e) {
-    console.error("vector retrieval failed, falling back to recent captures:", e);
-    fallback = "vector";
-    // Fallback (e.g. before backfill, or Voyage outage): use recent captures so
-    // search still works, just without semantic ranking.
-    const { data: recent } = await supabase
-      .from("captures")
-      .select("id, title, text, type, project, created_at")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(RETRIEVE_COUNT);
-    captures = recent ?? [];
-  }
+  // RAG retrieval: only the most relevant captures go to the LLM, never the whole base.
+  const { captures, fallback } = await retrieveCaptures(supabase, user.id, query, {
+    candidates: RERANK_CANDIDATES,
+    keep: RETRIEVE_COUNT,
+    label: "search",
+  });
 
   await logQuery(supabase, {
     userId: user.id,

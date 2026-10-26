@@ -21,11 +21,19 @@
 - [x] **Log upita** — `query_log` tabela: svako pitanje iz search/chata, šta je vraćeno i da li je bio fallback (rerank/vector)
 - [ ] **Teži eval dataset** — trenutni je zasićen (100%), ne može da izmeri chunking ni query rewriting: dodati prava pitanja iz korišćenja, follow-up pitanja, detalje iz dugačkih captura
 - [x] **Self-healing embeddinzi** — `fillMissingEmbeddings` u dnevnom task-due cronu popunjava `embedding is null` (do ~8K tokena po pokretanju)
-- [ ] **Query router** — pitanja o vremenu i stanju ("šta sam poslednje učio", "trenutni fokus", "otvoreni taskovi") nisu pitanja o sličnosti: prepoznati tip pitanja i umesto vektorske pretrage uzeti najnovije capture-e ili filtrirati po tipu/datumu. U evalu su to `aggregate` pitanja (trenutno 0% za obe metode)
+- [x] **Query router → agent** — pitanja o vremenu i stanju rešava agent: sam bira `list_captures` (filter po tipu/datumu) umesto vektorske pretrage
+- [x] **Agent (LangGraph + Groq)** — Chat bez zakačenog captura ide na `/api/agent`: alati `semantic_search`, `list_captures`, `get_capture`, `create_task` (uz potvrdu, `interrupt`); memorija u Postgresu (`PostgresSaver`, šema `langgraph`, `DATABASE_URL` preko poolera); guardrails (userId iz sesije, prompt-guard, budžet 3 pretrage / 5 koraka, clamp, kalendar). Eval `eval/agent-eval.mts` (12 pitanja)
+- [ ] **Pun eval agenta: low vs medium** — `--repeat 2` za oba, na svež Groq dan (`EVAL_PACE_MS=60000`); ako je tačnost ista, `AGENT_EFFORT = "low"` (na teškim pitanjima: low 6/6 sa ~5,3K tokena, medium 6/6 sa ~11K)
+- [ ] **Context compaction u agentu** — istorija (4 kruga) nosi sirove rezultate starih alata, pa 5. pitanje u razgovoru košta 11K ulaznih tokena i ide preko 8K/min. Iz starih krugova čuvati samo pitanja i konačne odgovore, rezultate alata samo za tekući krug. Meriti istim razgovorom od 5 pitanja (pre: 2,0K → 1,2K → 3,4K → 11,1K → 11,1K)
+- [ ] **Search vidi datume** — katalog u `/api/search` nema datum captura, pa stare beleške predstavlja kao aktuelno stanje ("intervju početkom jula" u oktobru). Dodati datum svakom capture-u + pravilo u promptu
+- [ ] **Dugme "pitaj agenta" u Search-u** *(opciono)* — za pitanja o vremenu/stanju, otvara Chat sa istim pitanjem
+- [ ] **Taskovi u beleškama** — većina obaveza živi u Note/Learning capture-ima, a ne kao Task, pa ih agent ne vidi kao taskove. Razmisliti: izvlačenje taskova iz beleški (uz potvrdu) ili bar podsetnik pri capture-u
 - [ ] **Jev za kategorizaciju** — TypeSafe AI "System One" model, vraća izbor iz liste (do 255 opcija), $0.042/M ulaznih tokena; treba min. $5 kredita. Dodati `classify()` u `lib/llm.ts` i pustiti `eval/categorize-eval.mts`; naslov i dalje daje LLM. Proveriti srpski
 - [ ] **Query rewriting u chatu** — `/api/chat` pretvara u vektor samo trenutnu poruku, pa follow-up tipa "reci mi više o tome" vuče nasumične capture-e. Haiku 5.5 prepiše pitanje u samostalno ("reci mi više o Mockito doThrow") pre pretrage; u eval dodati i follow-up pitanja da se izmeri razlika
 - [ ] **Live AI sugestije** — predlaže tip/projekt dok kucaš, pre save
 - [ ] **Summarize capture** — dugme na kartici, AI sažetak jednog capture-a
+
+- [ ] **Voyage kartica** — bez kartice 3 zahteva/min; jedna `semantic_search` u agentu = 2 Voyage zahteva (embed + rerank), pa 2 pretrage u pitanju okidaju fallback. Sa karticom 2.000/min, besplatni tokeni ostaju
 
 **Demo / javni pristup**
 - [ ] **Demo nalog za regrutere** — dugme "Try demo" na login stranici uloguje u demo nalog sa izmišljenim ali realističnim capture-ima (da search, graf i chat imaju šta da pokažu); RLS čuva prave beleške; noćni cron vraća demo podatke na početno stanje. Uslov: rate limiting po korisniku, da posetilac ne potroši ceo dnevni Groq budžet

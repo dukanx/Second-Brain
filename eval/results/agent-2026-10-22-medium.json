@@ -1,0 +1,155 @@
+{
+  "effort": "medium",
+  "results": [
+    {
+      "id": 1,
+      "kind": "time/state",
+      "checks": {
+        "tools": true,
+        "no_forbidden_tool": true,
+        "data": true
+      },
+      "pass": true,
+      "llmCalls": 2,
+      "tokens": 1986,
+      "seconds": 0.891
+    },
+    {
+      "id": 2,
+      "kind": "time/state",
+      "checks": {
+        "tools": true,
+        "data": true
+      },
+      "pass": true,
+      "llmCalls": 2,
+      "tokens": 1957,
+      "seconds": 1.104
+    },
+    {
+      "id": 3,
+      "kind": "time/state",
+      "checks": {
+        "tools": true,
+        "answer": true
+      },
+      "pass": true,
+      "llmCalls": 4,
+      "tokens": 6499,
+      "seconds": 2.297
+    },
+    {
+      "id": 4,
+      "kind": "time/state",
+      "checks": {
+        "tools": true,
+        "data": true,
+        "answer": true
+      },
+      "pass": true,
+      "llmCalls": 2,
+      "tokens": 2198,
+      "seconds": 1.223
+    },
+    {
+      "id": 5,
+      "kind": "topic",
+      "checks": {
+        "tools": true,
+        "data": true,
+        "answer": true
+      },
+      "pass": true,
+      "llmCalls": 3,
+      "tokens": 5202,
+      "seconds": 3.839
+    },
+    {
+      "id": 6,
+      "kind": "topic",
+      "checks": {
+        "tools": true,
+        "data": true,
+        "answer": true
+      },
+      "pass": true,
+      "llmCalls": 3,
+      "tokens": 5804,
+      "seconds": 3.904
+    },
+    {
+      "id": 7,
+      "kind": "multi-step",
+      "checks": {
+        "ran": false
+      },
+      "pass": false,
+      "llmCalls": 0,
+      "tokens": 0,
+      "seconds": 2.317,
+      "error": "400 {\"error\":{\"message\":\"Parsing failed. The model generated output that could not be parsed. Please adjust your prompt. See 'failed_generation' for more details.\",\"type\":\"invalid_request_error\",\"code"
+    },
+    {
+      "id": 8,
+      "kind": "multi-step",
+      "checks": {
+        "tools": true,
+        "data": true,
+        "answer": true
+      },
+      "pass": true,
+      "llmCalls": 3,
+      "tokens": 5001,
+      "seconds": 3.876
+    },
+    {
+      "id": 9,
+      "kind": "trap",
+      "checks": {
+        "ran": false
+      },
+      "pass": false,
+      "llmCalls": 0,
+      "tokens": 0,
+      "seconds": 4.8,
+      "error": "400 {\"error\":{\"message\":\"Tool call validation failed: tool call validation failed: parameters for tool semantic_search did not match schema: errors: [`/limit`: maximum: got 20, want 10]\",\"type\":\"inval"
+    },
+    {
+      "id": 10,
+      "kind": "trap",
+      "checks": {
+        "tools": true,
+        "due_date": true
+      },
+      "pass": true,
+      "llmCalls": 2,
+      "tokens": 2148,
+      "seconds": 1.218
+    },
+    {
+      "id": 11,
+      "kind": "trap",
+      "checks": {
+        "no_forbidden_tool": true,
+        "data": true,
+        "answer": true
+      },
+      "pass": true,
+      "llmCalls": 2,
+      "tokens": 2950,
+      "seconds": 3.82
+    },
+    {
+      "id": 12,
+      "kind": "trap",
+      "checks": {
+        "tools": true,
+        "answer": true
+      },
+      "pass": true,
+      "llmCalls": 2,
+      "tokens": 2135,
+      "seconds": 1.25
+    }
+  ]
+}

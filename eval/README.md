@@ -183,3 +183,52 @@ The prompt also gets the 5 most similar captures and the projects they are filed
   request. `lib/llm.ts` now retries both known failures (`json_validate_failed`,
   `tool_use_failed`) once with a matching reminder, for every LLM call (not just structured
   output).
+
+## Agent eval
+
+`eval/agent-eval.mts` runs every question in `agent-golden.json` (private, gitignored: the judge
+rules describe personal notes; the format is in `agent-golden.example.json`, with made-up
+questions) through the real agent
+(`lib/agent/graph.ts`, in-memory checkpointer) and checks:
+
+| check | what | how |
+|---|---|---|
+| `tools` / `no_forbidden_tool` | right tools called, wrong ones avoided | deterministic |
+| `data` | expected captures appeared in tool results | deterministic (ids) |
+| `due_date` | "do petka" became next Friday | deterministic |
+| `answer` | correct and grounded | LLM judge with a per-question rule |
+
+Plus cost per question: LLM calls, tokens, seconds. `create_task` is always declined, so the
+eval never writes to the database. Only pass/fail and metrics are saved.
+
+```bash
+npx tsx --env-file=.env.local eval/agent-eval.mts [--effort low|medium] [--only 7,9] [--repeat 2]
+```
+
+12 questions: time/state (4), topic (2), multi-step (2), traps (4: nothing to find, "remind me
+what I wrote" is not a task, an exact due date, a count).
+
+### 2026-10-22: first runs and fixes
+
+| run | low | medium |
+|---|---|---|
+| all 12, before fixes | 11/12 | 10/12 |
+| hardest (#7, #9) × 3, after fixes | 6/6 · 3.2 calls · ~5.3K tokens · 4.2 s | 6/6 · 4.2 calls · ~11K tokens · 6.3 s |
+
+- The first-run failures were API errors, not wrong answers: Groq "Parsing failed" on a tool
+  call (now retried, like `json_validate_failed`) and `limit: 20` against a schema max of 10
+  (limits are now clamped in code instead).
+- Found and fixed along the way: the model assumed what the thesis is about instead of looking
+  it up (grounding rule); "do petka" became a Wednesday (the code now writes a 7-day calendar
+  into the prompt); on `medium` it kept searching until 28K tokens (a search budget of 3 and a
+  step budget of 5, enforced in code); a Voyage rate-limit fallback was read as search results
+  (the tool now says "SEARCH UNAVAILABLE"); prompt-guard overflowed on long Serbian text
+  (checked in 600-char chunks).
+- One question apart is noise. **Pending:** a full run of both efforts with `--repeat 2`;
+  if accuracy is the same, the agent switches to `low` (half the tokens).
+
+### 2026-10-26: cost of a conversation
+
+Five questions in one thread: 2.0K → 1.2K → 3.4K → 11.1K → 11.1K input tokens. The last
+question is easy, but the 4-turn history carries raw tool results from earlier searches.
+Next: keep only questions and final answers from earlier turns (context compaction).

@@ -1,0 +1,32 @@
+[
+  {
+    "id": 1,
+    "kind": "time/state",
+    "q": "which tasks are still open?",
+    "tools_include": ["list_captures"],
+    "tools_exclude": ["create_task"],
+    "expect_ids_all": ["a1b2c3d4", "e5f6a7b8"]
+  },
+  {
+    "id": 2,
+    "kind": "topic",
+    "q": "how do I make a sourdough starter?",
+    "tools_include": ["semantic_search"],
+    "expect_ids_any": ["c9d0e1f2"],
+    "judge": "PASS if the answer explains feeding flour and water daily, based on the user's baking note."
+  },
+  {
+    "id": 3,
+    "kind": "trap",
+    "q": "create a task to call the dentist by Friday",
+    "tools_include": ["create_task"],
+    "create_task_due": "next_friday"
+  },
+  {
+    "id": 4,
+    "kind": "trap",
+    "q": "what did I write about volcanoes?",
+    "tools_include": ["semantic_search"],
+    "judge": "The user has no notes about volcanoes. PASS only if the answer says nothing was found."
+  }
+]

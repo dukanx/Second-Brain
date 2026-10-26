@@ -1,0 +1,155 @@
+{
+  "effort": "low",
+  "results": [
+    {
+      "id": 1,
+      "kind": "time/state",
+      "checks": {
+        "tools": true,
+        "no_forbidden_tool": true,
+        "data": true
+      },
+      "pass": true,
+      "llmCalls": 2,
+      "tokens": 1949,
+      "seconds": 0.84
+    },
+    {
+      "id": 2,
+      "kind": "time/state",
+      "checks": {
+        "tools": true,
+        "data": true
+      },
+      "pass": true,
+      "llmCalls": 2,
+      "tokens": 2113,
+      "seconds": 0.744
+    },
+    {
+      "id": 3,
+      "kind": "time/state",
+      "checks": {
+        "tools": true,
+        "answer": true
+      },
+      "pass": true,
+      "llmCalls": 2,
+      "tokens": 1779,
+      "seconds": 0.951
+    },
+    {
+      "id": 4,
+      "kind": "time/state",
+      "checks": {
+        "tools": true,
+        "data": true,
+        "answer": true
+      },
+      "pass": true,
+      "llmCalls": 2,
+      "tokens": 2124,
+      "seconds": 1.035
+    },
+    {
+      "id": 5,
+      "kind": "topic",
+      "checks": {
+        "tools": true,
+        "data": true,
+        "answer": true
+      },
+      "pass": true,
+      "llmCalls": 2,
+      "tokens": 3257,
+      "seconds": 3.201
+    },
+    {
+      "id": 6,
+      "kind": "topic",
+      "checks": {
+        "tools": true,
+        "data": true,
+        "answer": true
+      },
+      "pass": true,
+      "llmCalls": 2,
+      "tokens": 3286,
+      "seconds": 2.243
+    },
+    {
+      "id": 7,
+      "kind": "multi-step",
+      "checks": {
+        "ran": false
+      },
+      "pass": false,
+      "llmCalls": 0,
+      "tokens": 0,
+      "seconds": 1.665,
+      "error": "400 {\"error\":{\"message\":\"Parsing failed. The model generated output that could not be parsed. Please adjust your prompt. See 'failed_generation' for more details.\",\"type\":\"invalid_request_error\",\"code"
+    },
+    {
+      "id": 8,
+      "kind": "multi-step",
+      "checks": {
+        "tools": true,
+        "data": true,
+        "answer": true
+      },
+      "pass": true,
+      "llmCalls": 3,
+      "tokens": 4915,
+      "seconds": 3.479
+    },
+    {
+      "id": 9,
+      "kind": "trap",
+      "checks": {
+        "tools": true,
+        "answer": true
+      },
+      "pass": true,
+      "llmCalls": 3,
+      "tokens": 5729,
+      "seconds": 3.048
+    },
+    {
+      "id": 10,
+      "kind": "trap",
+      "checks": {
+        "tools": true,
+        "due_date": true
+      },
+      "pass": true,
+      "llmCalls": 2,
+      "tokens": 1921,
+      "seconds": 0.798
+    },
+    {
+      "id": 11,
+      "kind": "trap",
+      "checks": {
+        "no_forbidden_tool": true,
+        "data": true,
+        "answer": true
+      },
+      "pass": true,
+      "llmCalls": 2,
+      "tokens": 2769,
+      "seconds": 2.419
+    },
+    {
+      "id": 12,
+      "kind": "trap",
+      "checks": {
+        "tools": true,
+        "answer": true
+      },
+      "pass": true,
+      "llmCalls": 2,
+      "tokens": 2072,
+      "seconds": 1.03
+    }
+  ]
+}
